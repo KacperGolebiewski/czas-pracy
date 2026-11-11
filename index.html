@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'">
+<meta name="theme-color" content="#0e141b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f4f8" media="(prefers-color-scheme: light)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Czas pracy">
+<meta name="description" content="Obliczanie wynagrodzenia (EUR) na podstawie godzin wejścia i wyjścia, z raportem PDF.">
+<title>Czas pracy</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<style>
+/* ===================== WYGLĄD EKRANU ===================== */
+:root {
+  color-scheme: dark;
+  --bg: #0e141b;
+  --card: #18212d;
+  --card2: #202b3a;
+  --text: #e9eef5;
+  --muted: #a9b6c8;
+  --line: #2f3d50;
+  --border-in: #7387a0;
+  --accent: #62b8ff;
+  --on-accent: #05121f;
+  --danger: #ff9b9b;
+  --shadow: 0 .25rem .75rem rgba(0, 0, 0, .35);
+  --r: 1rem;
+  --nav-h: 4rem;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f2f4f8;
+    --card: #ffffff;
+    --card2: #f3f5f9;
+    --text: #111827;
+    --muted: #4b5563;
+    --line: #d3d9e2;
+    --border-in: #6b7686;
+    --accent: #0a5cab;
+    --on-accent: #ffffff;
+    --danger: #b42318;
+    --shadow: 0 .2rem .6rem rgba(16, 24, 40, .1);
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  overflow-x: hidden;
+}
+#app {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1rem clamp(.75rem, 4vw, 1.5rem);
+  padding-top: calc(1rem + env(safe-area-inset-top));
+  padding-bottom: calc(var(--nav-h) + 1.5rem + env(safe-area-inset-bottom));
+}
+h1 { font-size: clamp(1.35rem, 5vw, 1.75rem); margin: .25rem 0 1rem; }
+h2 { font-size: 1.1rem; margin: 0 0 .75rem; }
+h3 { font-size: 1rem; margin: 1rem 0 .5rem; }
+p { margin: 0 0 .75rem; }
+.muted { color: var(--muted); }
+.small { font-size: .875rem; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  min-width: 0;
+}
+.field { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .75rem; min-width: 0; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 0 .75rem; align-items: end; }
+label, .label { font-weight: 600; font-size: .9rem; }
+input, select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: .5rem .75rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--card2);
+  border: 1px solid var(--border-in);
+  border-radius: .6rem;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  padding: .5rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--card2);
+  border: 1px solid var(--border-in);
+  border-radius: .6rem;
+  cursor: pointer;
+  text-align: center;
+}
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+:focus-visible, .sr-only:focus-visible + label {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.actions .btn { flex: 1 1 8rem; }
+.error { color: var(--danger); font-weight: 600; margin: 0 0 .75rem; }
+.error:empty { display: none; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Lista „etykieta — wartość" (podgląd wyliczeń, podsumowania) */
+.kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .3rem 1rem; margin: 0 0 .75rem; }
+.kv dt { color: var(--muted); min-width: 0; }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.kv .total { border-top: 1px solid var(--line); padding-top: .4rem; font-size: 1.15rem; color: var(--text); }
+.preview { background: var(--card2); border-radius: .6rem; padding: .75rem; margin-bottom: .75rem; }
+.preview .kv { margin: 0; }
+
+/* Lista wpisów */
+.list { list-style: none; margin: 0; padding: 0; }
+.list > li { padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.list > li:last-child { border-bottom: 0; }
+.li-top { display: flex; justify-content: space-between; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+.li-amt { font-weight: 700; font-variant-numeric: tabular-nums; }
+.li-act { display: flex; gap: .5rem; margin-top: .5rem; }
+.li-act .btn { flex: 1 1 0; }
+.badge { color: var(--muted); font-size: .85rem; font-weight: 400; }
+
+/* Podsumowanie */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .75rem; }
+.daynav { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .5rem; align-items: end; margin-bottom: .75rem; }
+.daynav .field { margin: 0; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -.25rem; }
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.table-wrap th, .table-wrap td { padding: .5rem .5rem; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: left; }
+.table-wrap .n { text-align: right; }
+
+details { border-top: 1px solid var(--line); padding: .25rem 0; }
+details:first-of-type { border-top: 0; }
+summary { min-height: 2.75rem; display: flex; align-items: center; justify-content: space-between; list-style: none; cursor: pointer; font-weight: 600; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: '▾'; color: var(--muted); }
+details[open] > summary::after { content: '▴'; }
+.rules { padding-left: 1.25rem; margin: 0 0 .75rem; }
+.rules li { margin-bottom: .4rem; }
+.log-item { font-size: .9rem; overflow-wrap: anywhere; }
+
+/* Dolna nawigacja */
+.nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav button {
+  min-height: var(--nav-h);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem;
+  font: inherit; font-size: .8rem; font-weight: 600;
+  color: var(--muted); background: none; border: 0; cursor: pointer;
+  border-top: 3px solid transparent;
+}
+.nav button[aria-current="page"] { color: var(--accent); border-top-color: var(--accent); }
+.nav svg { width: 1.5rem; height: 1.5rem; }
+
+/* Komunikat i okno potwierdzenia */
+.toast {
+  position: fixed; left: 50%; bottom: calc(var(--nav-h) + 1rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  max-width: min(92vw, 30rem);
+  background: var(--text); color: var(--bg);
+  padding: .65rem 1rem; border-radius: .75rem; box-shadow: var(--shadow);
+  font-weight: 600; z-index: 20; text-align: center;
+  transition: opacity .2s;
+}
+.toast:empty { opacity: 0; pointer-events: none; }
+dialog {
+  width: min(92vw, 26rem);
+  color: var(--text); background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow);
+  padding: 1.25rem;
+}
+dialog::backdrop { background: rgba(0, 0, 0, .6); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* Raport jest widoczny wyłącznie na wydruku */
+#report { display: none; }
+
+/* ===================== UKŁAD PDF (WYDRUK) ===================== */
+@media print {
+  /* Nagłówek i stopka strony (pola marginesów) są dopisywane w <style id="page-style">,
+     bo zawierają dane raportu: nazwisko, okres, datę i numer strony. */
+  @page { size: A4; margin: 18mm 15mm 20mm 15mm; }
+
+  html, body { background: #fff !important; color: #000 !important; overflow: visible; }
+  body > *:not(#report) { display: none !important; }
+  #report {
+    display: block;
+    font: 10.5pt/1.4 system-ui, Arial, sans-serif;
+    color: #000;
+  }
+  #report h1 { font-size: 16pt; margin: 0 0 1mm; }
+  #report h2 {
+    font-size: 12pt; margin: 6mm 0 3mm; padding-bottom: 1mm;
+    border-bottom: 1pt solid #999;
+    break-after: avoid; page-break-after: avoid;
+  }
+  #report p { margin: 0 0 2.5mm; }
+  #report ol, #report ul { margin: 0 0 3mm; padding-left: 6mm; }
+  #report li { margin-bottom: 1.2mm; }
+  #report .r-meta { color: #000; margin-bottom: 4mm; padding-bottom: 2mm; border-bottom: 1pt solid #999; }
+  #report table {
+    width: 100%; border-collapse: collapse; margin: 3mm 0 5mm;
+    font-size: 9.5pt; font-variant-numeric: tabular-nums;
+  }
+  #report thead { display: table-header-group; }
+  #report th {
+    font-weight: 700; text-align: left; vertical-align: bottom;
+    padding: 1.2mm 1.5mm; border-bottom: 1pt solid #999;
+  }
+  #report td { padding: 1.2mm 1.5mm; vertical-align: top; border-bottom: .5pt solid #ccc; }
+  #report .n { text-align: right; }
+  #report td.n, #report .nw { white-space: nowrap; }
+  #report tr { break-inside: avoid; page-break-inside: avoid; }
+  #report tr.r-sum td { border-top: 3px double #000; border-bottom: 0; font-weight: 700; }
+  #report .r-ed { font-size: 8pt; white-space: nowrap; }
+  #report .r-break { break-before: page; page-break-before: always; }
+  #report .r-box { break-inside: avoid; page-break-inside: avoid; }
+  #report .r-pay {
+    display: flex; justify-content: space-between; gap: 5mm; align-items: baseline;
+    border: 2pt solid #000; padding: 3mm 4mm; margin: 3mm 0;
+    font-size: 12pt; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  #report .r-pay div:last-child { text-align: right; }
+  #report .r-gen { font-size: 9pt; }
+}
+</style>
+<!-- Dynamiczna część układu wydruku: nagłówek i stopka każdej strony -->
+<style id="page-style"></style>
+</head>
+<body>
+
+<main id="app">
+  <!-- ============ ZAKŁADKA: WPIS ============ -->
+  <section id="view-wpis" class="view" aria-labelledby="h-wpis">
+    <h1 id="h-wpis">Czas pracy</h1>
+    <form id="f-entry" class="card" novalidate>
+      <h2 id="entry-title">Nowy wpis</h2>
+      <div class="field">
+        <label for="e-date">Data</label>
+        <input type="date" id="e-date" required>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="e-in">Wejście</label>
+          <input type="time" id="e-in" required>
+        </div>
+        <div class="field">
+          <label for="e-out">Wyjście</label>
+          <input type="time" id="e-out" required>
+        </div>
+      </div>
+      <div id="e-preview" class="preview" aria-live="polite"></div>
+      <p id="e-error" class="error" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="btn primary" id="e-save">Zapisz wpis</button>
+        <button type="button" class="btn" id="e-cancel" hidden>Anuluj edycję</button>
+      </div>
+    </form>
+    <section class="card" aria-labelledby="h-list">
+      <h2 id="h-list">Ostatnie wpisy</h2>
+      <ul id="e-list" class="list"></ul>
+      <button type="button" class="btn" id="e-more" hidden>Pokaż więcej</button>
+    </section>
+  </section>
+
+  <!-- ============ ZAKŁADKA: PODSUMOWANIE ============ -->
+  <section id="view-podsumowanie" class="view" aria-labelledby="h-sum" hidden>
+    <h1 id="h-sum">Podsumowanie</h1>
+    <div class="card">
+      <div class="seg" role="group" aria-label="Rodzaj okresu">
+        <button type="button" class="btn" id="s-week" aria-pressed="true">Tydzień</button>
+        <button type="button" class="btn" id="s-month" aria-pressed="false">Miesiąc</button>
+      </div>
+      <div class="daynav">
+        <button type="button" class="btn" id="s-prev" aria-label="Poprzedni okres">‹</button>
+        <div class="field">
+          <label for="s-day">Dowolny dzień z okresu</label>
+          <input type="date" id="s-day">
+        </div>
+        <button type="button" class="btn" id="s-next" aria-label="Następny okres">›</button>
+      </div>
+      <p id="s-label" class="muted"></p>
+      <dl id="s-kv" class="kv"></dl>
+      <button type="button" class="btn primary" id="s-pdf" style="width:100%">Eksportuj PDF</button>
+    </div>
+    <div class="card">
+      <h2>Wpisy w okresie</h2>
+      <div id="s-table" class="table-wrap" tabindex="0" role="region" aria-label="Tabela wpisów w okresie"></div>
+    </div>
+  </section>
+
+  <!-- ============ ZAKŁADKA: USTAWIENIA ============ -->
+  <section id="view-ustawienia" class="view" aria-labelledby="h-set" hidden>
+    <h1 id="h-set">Ustawienia</h1>
+
+    <form id="f-rate" class="card" novalidate>
+      <h2>Stawka godzinowa brutto</h2>
+      <p id="r-current" class="muted"></p>
+      <div class="field">
+        <label for="r-rate">Stawka za godzinę (€)</label>
+        <input type="text" id="r-rate" inputmode="decimal" autocomplete="off" placeholder="np. 15,00" required>
+      </div>
+      <div class="field">
+        <label for="r-from">Obowiązuje od dnia</label>
+        <input type="date" id="r-from" required>
+      </div>
+      <p class="muted small">Zmiana stawki nie zmienia wpisów sprzed tej daty.</p>
+      <p id="r-error" class="error" role="alert"></p>
+      <button type="submit" class="btn primary" style="width:100%">Zapisz stawkę</button>
+      <div id="r-history"></div>
+    </form>
+
+    <div class="card">
+      <h2>Raport PDF</h2>
+      <div class="field">
+        <label for="o-name">Imię i nazwisko (opcjonalnie)</label>
+        <input type="text" id="o-name" maxlength="100" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="o-lang">Język eksportu</label>
+        <select id="o-lang">
+          <option value="pl">polski</option>
+          <option value="de">niemiecki (Deutsch)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Kopia zapasowa</h2>
+      <p class="muted small">Dane są zapisane tylko w tym urządzeniu. Regularnie eksportuj kopię do pliku.</p>
+      <div class="actions">
+        <button type="button" class="btn" id="b-export">Eksportuj kopię (JSON)</button>
+        <input type="file" id="b-import" class="sr-only" accept="application/json,.json">
+        <label for="b-import" class="btn">Importuj kopię (JSON)</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Dziennik zmian</summary>
+        <ul id="log-list" class="list"></ul>
+      </details>
+      <details>
+        <summary>Zasady obliczeń</summary>
+        <div id="rules-box"></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>Usuwanie danych</h2>
+      <p class="muted small">Usuwa wszystkie wpisy, stawki, ustawienia i dziennik zmian z tego urządzenia.</p>
+      <button type="button" class="btn danger" id="b-wipe" style="width:100%">Usuń wszystkie dane</button>
+    </div>
+  </section>
+</main>
+
+<nav class="nav" aria-label="Główna nawigacja">
+  <button type="button" data-tab="wpis" aria-current="page">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    Wpis
+  </button>
+  <button type="button" data-tab="podsumowanie">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+    Podsumowanie
+  </button>
+  <button type="button" data-tab="ustawienia">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    Ustawienia
+  </button>
+</nav>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<dialog id="dlg" aria-labelledby="dlg-title" aria-describedby="dlg-text">
+  <h2 id="dlg-title"></h2>
+  <p id="dlg-text"></p>
+  <div class="actions">
+    <button type="button" class="btn" id="dlg-no">Anuluj</button>
+    <button type="button" class="btn danger" id="dlg-yes">Usuń</button>
+  </div>
+</dialog>
+
+<!-- Kontener raportu: wypełniany przed drukiem, na ekranie ukryty -->
+<div id="report"></div>
+
+<script>
+/* =====================================================================
+   Czas pracy — cała logika w jednej przestrzeni nazw: window.CzasPracy
+   Układ pliku:
+     1. Czyste funkcje obliczeń (calc) i liczby całkowite
+     2. Formatowanie liczb i dat
+     3. Operacje na danych (wpisy, stawki, dziennik zmian, kopia zapasowa)
+     4. Raport PDF (PL / DE)
+     5. Interfejs użytkownika
+   ===================================================================== */
+window.CzasPracy = (() => {
+  'use strict';
+
+  const KLUCZ = 'czas_pracy_v1';
+  const WALUTY = { EUR: '€' }; // aplikacja działa wyłącznie w euro
+  const DZIEN = 480; // 8 godzin w minutach
+
+  /* ================= 1. OBLICZENIA ================= */
+
+  /** Dzielenie liczb całkowitych nieujemnych z zaokrągleniem half-up. */
+  function divRound(a, b) {
+    return Math.floor((2 * a + b) / (2 * b));
+  }
+
+  /** "HH:MM" -> minuty od północy albo null, gdy godzina jest niepoprawna. */
+  function parseTime(s) {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(s || ''));
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
+  /** Czas na miejscu w minutach; wyjście mniejsze niż wejście = zmiana przez północ. */
+  function onsiteMinutes(tIn, tOut) {
+    const a = parseTime(tIn), b = parseTime(tOut);
+    if (a === null || b === null || a === b) return null;
+    return b > a ? b - a : b + 1440 - a;
+  }
+
+  /** Podział czasu na miejscu na przerwę, godziny zwykłe i nadgodziny (wszystko w minutach). */
+  function calcMinutes(onsite) {
+    const brk = onsite < DZIEN ? 0 : (onsite === DZIEN ? 30 : 45);
+    const regular = Math.min(onsite, DZIEN) - brk;   // przerwa tylko z godzin zwykłych
+    const overtime = Math.max(0, onsite - DZIEN);    // nadgodziny w całości, bez przerwy
+    return { onsite, brk, regular, overtime, worked: regular + overtime };
+  }
+
+  /**
+   * Kwota jako liczba całkowita w jednostce 1/240 grosza (centa).
+   *   zwykłe × stawka/60 + nadgodziny × stawka × 1,25/60
+   *   = stawka × (4 × zwykłe + 5 × nadgodziny) / 240      [stawka w groszach]
+   * Dzięki temu sumy nie używają ułamków, a zaokrąglenie następuje raz, na końcu.
+   */
+  function amountNum(regular, overtime, rateCents) {
+    return rateCents * (4 * regular + 5 * overtime);
+  }
+  /** 1/240 grosza -> grosze (half-up). Jedyne miejsce zaokrąglenia do grosza. */
+  function numToCents(num) { return divRound(num, 240); }
+  /** 1/240 grosza -> tysięczne części waluty (kwota „dokładna", 3 miejsca po przecinku). */
+  function numToMills(num) { return divRound(num, 24); }
+
+  /**
+   * Czysta funkcja obliczeń jednego dnia.
+   * @param {string} tIn  godzina wejścia "HH:MM"
+   * @param {string} tOut godzina wyjścia "HH:MM"
+   * @param {number} rateCents stawka godzinowa w groszach/centach (liczba całkowita)
+   * @returns {{onsite,brk,regular,overtime,worked,num,mills,cents}|null}
+   */
+  function calc(tIn, tOut, rateCents) {
+    const onsite = onsiteMinutes(tIn, tOut);
+    if (onsite === null) return null;
+    const m = calcMinutes(onsite);
+    const num = amountNum(m.regular, m.overtime, rateCents || 0);
+    return { ...m, num, mills: numToMills(num), cents: numToCents(num) };
+  }
+
+  /* ================= 2. FORMATOWANIE ================= */
+
+  /** Liczba całkowita ze stałą liczbą miejsc po przecinku (PL i DE: przecinek dziesiętny). */
+  function fmtFixed(v, dec, locale) {
+    const p = 10 ** dec;
+    const int = Math.floor(v / p);
+    const s = new Intl.NumberFormat(locale || 'pl-PL', { maximumFractionDigits: 0 }).format(int);
+    return dec ? s + ',' + String(v % p).padStart(dec, '0') : s;
+  }
+  function fmtMoney(cents, cur, locale) { return fmtFixed(cents, 2, locale) + '\u00a0' + WALUTY[cur]; }
+  function fmtMills(mills, cur, locale) { return fmtFixed(mills, 3, locale) + '\u00a0' + WALUTY[cur]; }
+  function fmtRate(rateCents, cur, locale) { return fmtMoney(rateCents, cur, locale) + '/h'; }
+  /** Minuty -> godziny dziesiętne z 4 miejscami po przecinku. */
+  function fmtDecH(min, locale) { return fmtFixed(divRound(min * 10000, 60), 4, locale); }
+  /** Minuty -> "7 h 15 min". */
+  function fmtHM(min) { return Math.floor(min / 60) + '\u00a0h\u00a0' + String(min % 60).padStart(2, '0') + '\u00a0min'; }
+  /** Minuty -> "7:15". */
+  function fmtHMk(min) { return Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); }
+
+  /** Stawka wpisana przez użytkownika ("30", "30,5", "30.50") -> grosze albo null. */
+  function parseRate(s) {
+    const m = /^(\d{1,6})(?:[.,](\d{1,2}))?$/.exec(String(s).trim());
+    return m ? Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0')) : null;
+  }
+
+  // Daty to napisy "RRRR-MM-DD"; rachunki w UTC, żeby zmiana czasu niczego nie przesuwała.
+  function utc(s) { return new Date(s + 'T00:00:00Z'); }
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  function isDate(s) {
+    if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const d = utc(s);
+    return !isNaN(d) && iso(d) === s;
+  }
+  function addDays(s, n) { const d = utc(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); }
+  /** Dzień tygodnia: 0 = poniedziałek … 6 = niedziela. */
+  function weekday(s) { return (utc(s).getUTCDay() + 6) % 7; }
+  function today() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function fmtDate(s) { return s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(0, 4); }
+  function fmtDateTime(isoTs) {
+    const d = new Date(isoTs);
+    if (isNaN(d)) return String(isoTs);
+    const p = n => String(n).padStart(2, '0');
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  const DNI = ['pon.', 'wt.', 'śr.', 'czw.', 'pt.', 'sob.', 'niedz.'];
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  /* ================= 3. DANE ================= */
+
+  function emptyState() {
+    return { version: 1, settings: { name: '', lang: 'pl', rates: [] }, entries: [], log: [] };
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+  /**
+   * Stawka obowiązująca w danym dniu: ostatnia z datą „od" nie późniejszą niż dzień.
+   * Dla dni sprzed pierwszej stawki przyjmowana jest najwcześniejsza stawka.
+   */
+  function rateFor(state, date) {
+    const rates = state.settings.rates; // posortowane rosnąco po „from"
+    let hit = null;
+    for (const r of rates) if (r.from <= date) hit = r;
+    return hit || rates[0] || null;
+  }
+
+  function snap(e) {
+    return { date: e.date, in: e.in, out: e.out, rateCents: e.rateCents, currency: e.currency };
+  }
+
+  /** Walidacja danych wpisu; zwraca komunikat błędu albo null. */
+  function entryError(state, d, ignoreId) {
+    if (!isDate(d.date)) return 'Podaj poprawną datę.';
+    if (parseTime(d.in) === null) return 'Podaj poprawną godzinę wejścia.';
+    if (parseTime(d.out) === null) return 'Podaj poprawną godzinę wyjścia.';
+    if (d.in === d.out) return 'Godzina wyjścia musi być inna niż godzina wejścia.';
+    if (!rateFor(state, d.date)) return 'Najpierw ustaw stawkę godzinową w Ustawieniach.';
+    if (state.entries.some(e => e.date === d.date && e.id !== ignoreId)) {
+      return 'Wpis dla dnia ' + fmtDate(d.date) + ' już istnieje. Edytuj go na liście poniżej.';
+    }
+    return null;
+  }
+
+  /** Nowy wpis; zapisuje stawkę i walutę obowiązujące w dniu pracy. */
+  function addEntry(state, d, now) {
+    const error = entryError(state, d, null);
+    if (error) return { ok: false, error };
+    const r = rateFor(state, d.date);
+    const entry = { id: uid(), date: d.date, in: d.in, out: d.out, rateCents: r.rateCents, currency: r.currency, edited: false, created: now };
+    state.entries.push(entry);
+    return { ok: true, entry };
+  }
+
+  /** Edycja wpisu: zapis w dzienniku (wartości przed i po) i oznaczenie „edytowano". */
+  function editEntry(state, id, d, now) {
+    const entry = state.entries.find(e => e.id === id);
+    if (!entry) return { ok: false, error: 'Nie znaleziono wpisu.' };
+    const error = entryError(state, d, id);
+    if (error) return { ok: false, error };
+    if (entry.date === d.date && entry.in === d.in && entry.out === d.out) return { ok: true, entry, changed: false };
+    const before = snap(entry);
+    const r = rateFor(state, d.date);
+    Object.assign(entry, { date: d.date, in: d.in, out: d.out, rateCents: r.rateCents, currency: r.currency, edited: true });
+    state.log.push({ id: uid(), ts: now, op: 'edit', entryId: id, before, after: snap(entry) });
+    return { ok: true, entry, changed: true };
+  }
+
+  /** Usunięcie wpisu: rekord w dzienniku zostaje na stałe. */
+  function deleteEntry(state, id, now) {
+    const i = state.entries.findIndex(e => e.id === id);
+    if (i < 0) return { ok: false, error: 'Nie znaleziono wpisu.' };
+    const [entry] = state.entries.splice(i, 1);
+    state.log.push({ id: uid(), ts: now, op: 'delete', entryId: id, before: snap(entry), after: null });
+    return { ok: true };
+  }
+
+  /**
+   * Nowa stawka od wskazanej daty. Wpisy z dnia „od" i późniejsze dostają stawkę
+   * obowiązującą w ich dniu pracy; wpisy sprzed tej daty nie są ruszane.
+   */
+  function setRate(state, r, now) {
+    if (!isDate(r.from)) return { ok: false, error: 'Podaj poprawną datę obowiązywania stawki.' };
+    if (!Number.isSafeInteger(r.rateCents) || r.rateCents < 0) return { ok: false, error: 'Stawka musi być liczbą nie mniejszą niż 0 (np. 15,00).' };
+    if (!WALUTY[r.currency]) return { ok: false, error: 'Obsługiwana waluta to EUR.' };
+    const rates = state.settings.rates;
+    const prev = rateFor(state, r.from);
+    const rec = { from: r.from, rateCents: r.rateCents, currency: r.currency };
+    const i = rates.findIndex(x => x.from === r.from);
+    if (i >= 0) rates[i] = rec; else rates.push(rec);
+    rates.sort((a, b) => (a.from < b.from ? -1 : 1));
+    let affected = 0;
+    for (const e of state.entries) {
+      if (e.date < r.from) continue;
+      const x = rateFor(state, e.date);
+      if (e.rateCents !== x.rateCents || e.currency !== x.currency) {
+        e.rateCents = x.rateCents; e.currency = x.currency; affected++;
+      }
+    }
+    state.log.push({ id: uid(), ts: now, op: 'rate', before: prev ? { ...prev } : null, after: { ...rec }, affected });
+    return { ok: true, affected };
+  }
+
+  /** Zakres okresu zawierającego dany dzień: tydzień (pon.–niedz.) albo miesiąc. */
+  function periodRange(mode, day) {
+    if (mode === 'month') {
+      const y = Number(day.slice(0, 4)), m = Number(day.slice(5, 7));
+      return { mode, from: day.slice(0, 8) + '01', to: iso(new Date(Date.UTC(y, m, 0))) };
+    }
+    const from = addDays(day, -weekday(day));
+    return { mode: 'week', from, to: addDays(from, 6) };
+  }
+
+  /** Tygodnie (pon.–niedz.) w zakresie; tydzień ucięty granicą miesiąca jest niepełny. */
+  function weeksOf(from, to) {
+    const out = [];
+    let start = from;
+    while (start <= to) {
+      let end = addDays(start, 6 - weekday(start));
+      if (end > to) end = to;
+      out.push({ from: start, to: end, full: weekday(start) === 0 && weekday(end) === 6 });
+      start = addDays(end, 1);
+    }
+    return out;
+  }
+
+  function entriesIn(state, from, to) {
+    return state.entries.filter(e => e.date >= from && e.date <= to).sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+
+  /** Sumy okresu: minuty oraz kwoty (w 1/240 grosza) osobno dla każdej waluty. */
+  function summarize(entries) {
+    const s = { days: 0, onsite: 0, brk: 0, regular: 0, overtime: 0, worked: 0, money: {} };
+    for (const e of entries) {
+      const c = calc(e.in, e.out, e.rateCents);
+      if (!c) continue;
+      s.days++; s.onsite += c.onsite; s.brk += c.brk; s.regular += c.regular; s.overtime += c.overtime; s.worked += c.worked;
+      const m = s.money[e.currency] || (s.money[e.currency] = { num: 0, regular: 0, overtime: 0 });
+      m.num += c.num; m.regular += c.regular; m.overtime += c.overtime;
+    }
+    return s;
+  }
+
+  /** Lista kwot sumy w stałej kolejności walut; zaokrąglenie do grosza dopiero tutaj. */
+  function moneyList(sum) {
+    return Object.keys(WALUTY).filter(c => sum.money[c]).map(c => ({
+      cur: c, num: sum.money[c].num, regular: sum.money[c].regular, overtime: sum.money[c].overtime,
+      mills: numToMills(sum.money[c].num), cents: numToCents(sum.money[c].num)
+    }));
+  }
+
+  /** Rekordy dziennika (edycje i usunięcia) dotyczące dni z zakresu. */
+  function logIn(state, from, to) {
+    const inR = s => !!s && s.date >= from && s.date <= to;
+    return state.log.filter(l => (l.op === 'edit' || l.op === 'delete') && (inR(l.before) || inR(l.after)));
+  }
+
+  /**
+   * Walidacja struktury kopii zapasowej przed nadpisaniem danych.
+   * Zwraca { ok, errors, state } — state zawiera tylko znane, sprawdzone pola.
+   */
+  function validateBackup(o) {
+    const errors = [];
+    const isObj = x => x !== null && typeof x === 'object' && !Array.isArray(x);
+    const isRate = x => Number.isSafeInteger(x) && x >= 0;
+    const snapOk = x => isObj(x) && isDate(x.date) && parseTime(x.in) !== null && parseTime(x.out) !== null && isRate(x.rateCents) && !!WALUTY[x.currency];
+    const rateOk = x => isObj(x) && isDate(x.from) && isRate(x.rateCents) && !!WALUTY[x.currency];
+    if (!isObj(o)) return { ok: false, errors: ['Plik nie zawiera obiektu z danymi.'] };
+    if (o.version !== 1) errors.push('Nieobsługiwana wersja danych (oczekiwano 1).');
+    const st = emptyState();
+    if (!isObj(o.settings)) errors.push('Brak sekcji „settings".');
+    else {
+      if (typeof o.settings.name !== 'string' || o.settings.name.length > 100) errors.push('Niepoprawne imię i nazwisko.');
+      else st.settings.name = o.settings.name;
+      if (o.settings.lang !== 'pl' && o.settings.lang !== 'de') errors.push('Niepoprawny język eksportu.');
+      else st.settings.lang = o.settings.lang;
+      if (!Array.isArray(o.settings.rates)) errors.push('Brak listy stawek.');
+      else {
+        const seen = new Set();
+        o.settings.rates.forEach((r, i) => {
+          if (!rateOk(r) || seen.has(r.from)) errors.push('Niepoprawna stawka nr ' + (i + 1) + '.');
+          else { seen.add(r.from); st.settings.rates.push({ from: r.from, rateCents: r.rateCents, currency: r.currency }); }
+        });
+        st.settings.rates.sort((a, b) => (a.from < b.from ? -1 : 1));
+      }
+    }
+    if (!Array.isArray(o.entries)) errors.push('Brak listy wpisów.');
+    else {
+      const ids = new Set(), dates = new Set();
+      o.entries.forEach((e, i) => {
+        if (!snapOk(e) || e.in === e.out || typeof e.id !== 'string' || !e.id || ids.has(e.id) || dates.has(e.date)) {
+          errors.push('Niepoprawny wpis nr ' + (i + 1) + '.');
+        } else {
+          ids.add(e.id); dates.add(e.date);
+          st.entries.push({ id: e.id, ...snap(e), edited: e.edited === true, created: typeof e.created === 'string' ? e.created : '' });
+        }
+      });
+    }
+    if (!Array.isArray(o.log)) errors.push('Brak dziennika zmian.');
+    else {
+      o.log.forEach((l, i) => {
+        const bad = () => errors.push('Niepoprawny rekord dziennika nr ' + (i + 1) + '.');
+        if (!isObj(l) || typeof l.ts !== 'string' || typeof l.id !== 'string') return bad();
+        if (l.op === 'edit' && snapOk(l.before) && snapOk(l.after)) {
+          st.log.push({ id: l.id, ts: l.ts, op: 'edit', entryId: String(l.entryId || ''), before: snap(l.before), after: snap(l.after) });
+        } else if (l.op === 'delete' && snapOk(l.before)) {
+          st.log.push({ id: l.id, ts: l.ts, op: 'delete', entryId: String(l.entryId || ''), before: snap(l.before), after: null });
+        } else if (l.op === 'rate' && rateOk(l.after) && (l.before === null || rateOk(l.before))) {
+          const cp = r => ({ from: r.from, rateCents: r.rateCents, currency: r.currency });
+          st.log.push({ id: l.id, ts: l.ts, op: 'rate', before: l.before ? cp(l.before) : null, after: cp(l.after), affected: Number.isSafeInteger(l.affected) ? l.affected : 0 });
+        } else bad();
+      });
+    }
+    return { ok: errors.length === 0, errors, state: st };
+  }
+
+  /* ================= 4. RAPORT PDF ================= */
+
+  // Teksty raportu w obu językach. Opis zasad po polsku służy też zakładce Ustawienia.
+  const T = {
+    pl: {
+      locale: 'pl-PL', app: 'Czas pracy', period: 'Okres', week: 'tydzień', month: 'miesiąc',
+      gross: 'Kwoty brutto', generated: 'Wygenerowano', pageA: 'Strona ', pageB: ' z ',
+      title: 'Sposób obliczania wynagrodzenia',
+      rules: [
+        '<b>Czas na miejscu</b> = godzina wyjścia − godzina wejścia, liczony w minutach. Jeśli praca kończy się po północy, czas liczy się do godziny wyjścia następnego dnia.',
+        '<b>Przerwa</b> zależy od czasu na miejscu: poniżej 8 godzin (mniej niż 480 min) – bez przerwy; dokładnie 8 godzin (480 min) – 30 min; powyżej 8 godzin (ponad 480 min) – 45 min. Przerwa jest odejmowana wyłącznie od godzin zwykłych.',
+        '<b>Godziny zwykłe</b> = czas na miejscu, ale najwyżej 8 godzin (480 min), pomniejszony o przerwę. Płatne 100% stawki.',
+        '<b>Nadgodziny</b> = cały czas na miejscu ponad 8 godzin (480 min). Liczone w całości, bez odejmowania przerwy, płatne 125% stawki.',
+        '<b>Kwota za dzień</b> = minuty zwykłe × (stawka ÷ 60) + minuty nadgodzin × (stawka × 1,25 ÷ 60).',
+        'Czas liczony jest w pełnych minutach, bez zaokrągleń.',
+        'Każdy dzień liczony jest stawką obowiązującą w dniu pracy. Późniejsza zmiana stawki nie zmienia wcześniejszych dni.'
+      ],
+      exTitle: r => 'Przykład krok po kroku: praca od 8:00 do 17:00, stawka ' + r,
+      step: 'Pozycja', how: 'Obliczenie', result: 'Wynik',
+      onsite: 'Czas na miejscu', brk: 'Przerwa', brkOver: 'Przerwa (powyżej 8 h)', regular: 'Godziny zwykłe',
+      overtime: 'Nadgodziny', worked: 'Przepracowane', total: 'Razem', regShort: 'Zwykłe',
+      roundTitle: 'Zaokrąglenia',
+      rounding: [
+        'Kwoty liczone są dokładnie, w ułamkach centa. Zaokrąglenie do pełnego centa następuje tylko raz, na końcu: od 0,5 centa w górę.',
+        'Dla każdego dnia raport pokazuje kwotę dokładną (3 miejsca po przecinku) i kwotę zaokrągloną.',
+        'Sumy tygodnia i miesiąca powstają z sumy minut i dokładnych kwot, a nie z dodawania zaokrąglonych kwot dziennych. Dlatego suma może różnić się o cent od ręcznego dodania kwot dziennych.'
+      ],
+      grossNote: 'Wszystkie kwoty w raporcie są kwotami brutto, przed potrąceniami (podatek, składki).',
+      t1: 'Zestawienie godzin (w minutach)', t2: 'Wyliczenie kwot',
+      t2note: 'Stawka za minutę = stawka godzinowa ÷ 60. Nadgodziny: stawka × 1,25 ÷ 60.',
+      date: 'Data', inout: 'Wejście–wyjście', regH: 'Zwykłe (h)', otH: 'Nadgodziny (h)',
+      calcCol: 'Wyliczenie: min × stawka za minutę', exact: 'Kwota dokładna', rounded: 'Kwota zaokrąglona', rate: 'Stawka',
+      edited: '(edytowano)', perSum: 'Podsumowanie okresu', hm: 'h:min', dec: 'Godziny dziesiętnie', minutes: 'Minuty',
+      totalAmount: 'Łączna kwota', weeks: 'Podział na tygodnie (pon.–niedz.)', weekCol: 'Tydzień', partial: '(niepełny)',
+      days: 'Dni', breaks: 'Przerwy',
+      log: 'Dziennik zmian', logTs: 'Data zmiany', logOp: 'Operacja', logDay: 'Dzień', logBefore: 'Poprzednie wartości',
+      logAfter: 'Nowe wartości', opEdit: 'Edycja', opDelete: 'Usunięcie',
+      summary: 'Podsumowanie', workedTotal: 'Łącznie przepracowane', payout: 'Kwota do wypłaty brutto',
+      none: 'Brak wpisów w tym okresie.'
+    },
+    de: {
+      locale: 'de-DE', app: 'Czas pracy – Arbeitszeit', period: 'Zeitraum', week: 'Woche', month: 'Monat',
+      gross: 'Bruttobeträge', generated: 'Erstellt am', pageA: 'Seite ', pageB: ' von ',
+      title: 'Berechnung der Vergütung',
+      rules: [
+        '<b>Anwesenheitszeit</b> = Uhrzeit Gehen − Uhrzeit Kommen, in Minuten. Endet die Arbeit nach Mitternacht, wird bis zur Uhrzeit des Gehens am Folgetag gerechnet.',
+        'Die <b>Pause</b> richtet sich nach der Anwesenheitszeit: unter 8 Stunden (weniger als 480 Min.) – keine Pause; genau 8 Stunden (480 Min.) – 30 Min.; über 8 Stunden (mehr als 480 Min.) – 45 Min. Die Pause wird ausschließlich von den regulären Stunden abgezogen.',
+        '<b>Reguläre Stunden</b> = Anwesenheitszeit, höchstens jedoch 8 Stunden (480 Min.), abzüglich der Pause. Vergütung: 100 % des Stundensatzes.',
+        '<b>Überstunden</b> = die gesamte Anwesenheitszeit über 8 Stunden (480 Min.). Sie zählen vollständig, ohne Pausenabzug, und werden mit 125 % des Stundensatzes vergütet.',
+        '<b>Tagesbetrag</b> = reguläre Minuten × (Stundensatz ÷ 60) + Überstundenminuten × (Stundensatz × 1,25 ÷ 60).',
+        'Die Zeit wird in vollen Minuten gerechnet, ohne Rundung.',
+        'Für jeden Tag gilt der Stundensatz, der am Arbeitstag gültig war. Eine spätere Änderung des Stundensatzes ändert frühere Tage nicht.'
+      ],
+      exTitle: r => 'Beispiel Schritt für Schritt: Arbeit von 8:00 bis 17:00 Uhr, Stundensatz ' + r,
+      step: 'Position', how: 'Berechnung', result: 'Ergebnis',
+      onsite: 'Anwesenheitszeit', brk: 'Pause', brkOver: 'Pause (über 8 h)', regular: 'Reguläre Stunden',
+      overtime: 'Überstunden', worked: 'Gearbeitet', total: 'Gesamt', regShort: 'Regulär',
+      roundTitle: 'Rundung',
+      rounding: [
+        'Die Beträge werden exakt berechnet, in Bruchteilen eines Cents. Auf volle Cent wird nur einmal gerundet, am Ende: ab 0,5 Cent wird aufgerundet.',
+        'Für jeden Tag zeigt der Bericht den genauen Betrag (3 Nachkommastellen) und den gerundeten Betrag.',
+        'Wochen- und Monatssummen entstehen aus der Summe der Minuten und der genauen Beträge, nicht aus der Addition gerundeter Tagesbeträge. Deshalb kann die Summe um einen Cent von der Addition der Tagesbeträge abweichen.'
+      ],
+      grossNote: 'Alle Beträge in diesem Bericht sind Bruttobeträge, vor Abzügen (Steuern, Sozialabgaben).',
+      t1: 'Stundenübersicht (in Minuten)', t2: 'Berechnung der Beträge',
+      t2note: 'Satz pro Minute = Stundensatz ÷ 60. Überstunden: Stundensatz × 1,25 ÷ 60.',
+      date: 'Datum', inout: 'Kommen–Gehen', regH: 'Regulär (h)', otH: 'Überstunden (h)',
+      calcCol: 'Berechnung: Min. × Satz pro Minute', exact: 'Genauer Betrag', rounded: 'Gerundeter Betrag', rate: 'Stundensatz',
+      edited: '(bearbeitet)', perSum: 'Zusammenfassung des Zeitraums', hm: 'h:min', dec: 'Dezimalstunden', minutes: 'Minuten',
+      totalAmount: 'Gesamtbetrag', weeks: 'Aufteilung nach Wochen (Mo.–So.)', weekCol: 'Woche', partial: '(unvollständig)',
+      days: 'Tage', breaks: 'Pausen',
+      log: 'Änderungsprotokoll', logTs: 'Änderungsdatum', logOp: 'Vorgang', logDay: 'Tag', logBefore: 'Vorherige Werte',
+      logAfter: 'Neue Werte', opEdit: 'Bearbeitung', opDelete: 'Löschung',
+      summary: 'Zusammenfassung', workedTotal: 'Insgesamt gearbeitet', payout: 'Auszahlungsbetrag brutto',
+      none: 'Keine Einträge in diesem Zeitraum.'
+    }
+  };
+
+  function cssStr(s) { return '"' + String(s).replace(/[\\"]/g, '\\$&').replace(/[\r\n]+/g, ' ') + '"'; }
+
+  /**
+   * Buduje raport dla okresu. Zwraca { html, pageCss, title, sum, money }.
+   * Funkcja nie dotyka DOM ani localStorage — można ją testować.
+   */
+  function buildReport(state, range, lang, nowIso) {
+    const t = T[lang] || T.pl, L = t.locale;
+    const entries = entriesIn(state, range.from, range.to);
+    const sum = summarize(entries);
+    const money = moneyList(sum);
+    const logs = logIn(state, range.from, range.to);
+    const defCur = (entries[0] || rateFor(state, range.to) || {}).currency || 'EUR';
+    const periodTxt = fmtDate(range.from) + ' – ' + fmtDate(range.to);
+    const name = state.settings.name.trim();
+    const amounts = (list, kind) => list.length
+      ? list.map(m => (kind === 'exact' ? fmtMills(m.mills, m.cur, L) : fmtMoney(m.cents, m.cur, L))).join('<br>')
+      : (kind === 'exact' ? fmtMills(0, defCur, L) : fmtMoney(0, defCur, L));
+    const ed = e => (e.edited ? ' <span class="r-ed">' + t.edited + '</span>' : '');
+    const desc = s => (s ? fmtDate(s.date) + ', ' + s.in + '–' + s.out + ', ' + fmtRate(s.rateCents, s.currency, L) : '—');
+
+    /* --- Strona 1: objaśnienie --- */
+    const ex = calc('08:00', '17:00', 3000);
+    const exReg = numToCents(amountNum(ex.regular, 0, 3000));
+    const exOt = numToCents(amountNum(0, ex.overtime, 3000));
+    let h = '<section class="r-explain">' +
+      '<h1>' + t.title + '</h1>' +
+      '<p class="r-meta">' + esc(t.app) + (name ? ' · ' + esc(name) : '') + ' · ' + t.period + ': ' + periodTxt + ' (' + t[range.mode] + ')</p>' +
+      '<ol>' + t.rules.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
+      '<h2>' + t.exTitle(fmtRate(3000, defCur, L)) + '</h2>' +
+      '<table><thead><tr><th>' + t.step + '</th><th>' + t.how + '</th><th class="n">' + t.result + '</th></tr></thead><tbody>' +
+      '<tr><td>' + t.onsite + '</td><td>17:00 − 8:00</td><td class="n">' + ex.onsite + ' min (' + fmtHM(ex.onsite) + ')</td></tr>' +
+      '<tr><td>' + t.brkOver + '</td><td></td><td class="n">' + ex.brk + ' min</td></tr>' +
+      '<tr><td>' + t.regular + '</td><td>' + ex.onsite + ' − ' + ex.brk + ' − ' + ex.overtime + ' = ' + ex.regular + ' min (' + fmtHM(ex.regular) + ')<br>' +
+        ex.regular + ' × ' + fmtFixed(3000, 2, L) + ' ÷ 60</td><td class="n">' + fmtMoney(exReg, defCur, L) + '</td></tr>' +
+      '<tr><td>' + t.overtime + '</td><td>' + ex.onsite + ' − 480 = ' + ex.overtime + ' min (' + fmtHM(ex.overtime) + ') × 125%<br>' +
+        ex.overtime + ' × ' + fmtFixed(3000, 2, L) + ' × 1,25 ÷ 60</td><td class="n">' + fmtMoney(exOt, defCur, L) + '</td></tr>' +
+      '<tr class="r-sum"><td>' + t.total + '</td><td></td><td class="n">' + fmtMoney(ex.cents, defCur, L) + '</td></tr>' +
+      '</tbody></table>' +
+      '<h2>' + t.roundTitle + '</h2><ul>' + t.rounding.map(r => '<li>' + r + '</li>').join('') + '</ul>' +
+      '<p><b>' + t.grossNote + '</b></p></section>';
+
+    /* --- Strony 2+: zestawienie godzin i kwot --- */
+    h += '<section class="r-break r-days"><h2>' + t.t1 + '</h2>';
+    if (!entries.length) h += '<p>' + t.none + '</p>';
+    else {
+      h += '<table><thead><tr><th>' + t.date + '</th><th>' + t.inout + '</th><th class="n">' + t.onsite + '</th><th class="n">' + t.brk +
+        '</th><th class="n">' + t.regShort + '</th><th class="n">' + t.overtime + '</th><th class="n">' + t.worked + '</th></tr></thead><tbody>';
+      for (const e of entries) {
+        const c = calc(e.in, e.out, e.rateCents);
+        h += '<tr><td>' + fmtDate(e.date) + ed(e) + '</td><td class="nw">' + e.in + '–' + e.out + '</td><td class="n">' + c.onsite + '</td><td class="n">' + c.brk +
+          '</td><td class="n">' + c.regular + '</td><td class="n">' + c.overtime + '</td><td class="n">' + c.worked + '</td></tr>';
+      }
+      h += '<tr class="r-sum"><td>' + t.total + '</td><td></td><td class="n">' + sum.onsite + '</td><td class="n">' + sum.brk + '</td><td class="n">' +
+        sum.regular + '</td><td class="n">' + sum.overtime + '</td><td class="n">' + sum.worked + '</td></tr></tbody></table>';
+
+      h += '<h2>' + t.t2 + '</h2><p>' + t.t2note + '</p>' +
+        '<table><thead><tr><th>' + t.date + '</th><th class="n">' + t.regH + '</th><th class="n">' + t.otH + '</th><th>' + t.calcCol +
+        '</th><th class="n">' + t.exact + '</th><th class="n">' + t.rounded + '</th><th class="n">' + t.rate + '</th></tr></thead><tbody>';
+      for (const e of entries) {
+        const c = calc(e.in, e.out, e.rateCents);
+        const rs = fmtFixed(e.rateCents, 2, L);
+        const how = '<span class="nw">' + c.regular + ' × ' + rs + '/60</span>' +
+          (c.overtime ? ' <span class="nw">+ ' + c.overtime + ' × ' + rs + ' × 1,25/60</span>' : '');
+        h += '<tr><td>' + fmtDate(e.date) + ed(e) + '</td><td class="n">' + fmtDecH(c.regular, L) + '</td><td class="n">' + fmtDecH(c.overtime, L) +
+          '</td><td>' + how + '</td><td class="n">' + fmtMills(c.mills, e.currency, L) + '</td><td class="n">' + fmtMoney(c.cents, e.currency, L) +
+          '</td><td class="n">' + fmtRate(e.rateCents, e.currency, L) + '</td></tr>';
+      }
+      money.forEach(m => {
+        h += '<tr class="r-sum"><td>' + t.total + (money.length > 1 ? ' ' + m.cur : '') + '</td><td class="n">' + fmtDecH(m.regular, L) + '</td><td class="n">' +
+          fmtDecH(m.overtime, L) + '</td><td></td><td class="n">' + fmtMills(m.mills, m.cur, L) + '</td><td class="n">' + fmtMoney(m.cents, m.cur, L) + '</td><td></td></tr>';
+      });
+      h += '</tbody></table>';
+    }
+
+    const hRow = (label, min) => '<tr><td>' + label + '</td><td class="n">' + fmtHMk(min) + '</td><td class="n">' + fmtDecH(min, L) + '</td><td class="n">' + min + '</td></tr>';
+    h += '<div class="r-box"><h2>' + t.perSum + '</h2><table><thead><tr><th></th><th class="n">' + t.hm + '</th><th class="n">' + t.dec +
+      '</th><th class="n">' + t.minutes + '</th></tr></thead><tbody>' +
+      hRow(t.onsite, sum.onsite) + hRow(t.breaks, sum.brk) + hRow(t.regular, sum.regular) + hRow(t.overtime, sum.overtime) + hRow(t.workedTotal, sum.worked) +
+      '<tr class="r-sum"><td>' + t.totalAmount + '</td><td class="n" colspan="3">' + amounts(money, 'rounded') + '</td></tr></tbody></table></div>';
+
+    /* --- Miesiąc: podział na tygodnie --- */
+    if (range.mode === 'month') {
+      h += '<h2>' + t.weeks + '</h2><table><thead><tr><th>' + t.weekCol + '</th><th class="n">' + t.days + '</th><th class="n">' + t.regShort +
+        '</th><th class="n">' + t.overtime + '</th><th class="n">' + t.breaks + '</th><th class="n">' + t.exact + '</th><th class="n">' + t.rounded + '</th></tr></thead><tbody>';
+      for (const w of weeksOf(range.from, range.to)) {
+        const ws = summarize(entriesIn(state, w.from, w.to)), wm = moneyList(ws);
+        h += '<tr><td>' + fmtDate(w.from) + ' – ' + fmtDate(w.to) + (w.full ? '' : ' ' + t.partial) + '</td><td class="n">' + ws.days + '</td><td class="n">' +
+          fmtHMk(ws.regular) + '</td><td class="n">' + fmtHMk(ws.overtime) + '</td><td class="n">' + fmtHMk(ws.brk) + '</td><td class="n">' +
+          amounts(wm, 'exact') + '</td><td class="n">' + amounts(wm, 'rounded') + '</td></tr>';
+      }
+      h += '<tr class="r-sum"><td>' + t.total + '</td><td class="n">' + sum.days + '</td><td class="n">' + fmtHMk(sum.regular) + '</td><td class="n">' +
+        fmtHMk(sum.overtime) + '</td><td class="n">' + fmtHMk(sum.brk) + '</td><td class="n">' + amounts(money, 'exact') + '</td><td class="n">' +
+        amounts(money, 'rounded') + '</td></tr></tbody></table>';
+    }
+    h += '</section>';
+
+    /* --- Dziennik zmian: tylko gdy w okresie były edycje lub usunięcia --- */
+    if (logs.length) {
+      h += '<section class="r-break r-log"><h2>' + t.log + '</h2><table><thead><tr><th>' + t.logTs + '</th><th>' + t.logOp + '</th><th>' + t.logDay +
+        '</th><th>' + t.logBefore + '</th><th>' + t.logAfter + '</th></tr></thead><tbody>';
+      for (const l of logs) {
+        h += '<tr><td class="nw">' + fmtDateTime(l.ts) + '</td><td>' + (l.op === 'edit' ? t.opEdit : t.opDelete) + '</td><td class="nw">' +
+          fmtDate((l.after || l.before).date) + '</td><td>' + desc(l.before) + '</td><td>' + desc(l.after) + '</td></tr>';
+      }
+      h += '</tbody></table></section>';
+    }
+
+    /* --- Stopka sumaryczna --- */
+    const sRow = (label, min) => '<tr><td>' + label + '</td><td class="n">' + fmtHM(min) + ' (' + fmtDecH(min, L) + ' h)</td></tr>';
+    h += '<section class="r-box r-final"><h2>' + t.summary + '</h2><table><tbody>' +
+      '<tr><td>' + t.days + '</td><td class="n">' + sum.days + '</td></tr>' +
+      sRow(t.regular, sum.regular) + sRow(t.overtime, sum.overtime) + sRow(t.breaks, sum.brk) + sRow(t.workedTotal, sum.worked) +
+      '</tbody></table>' +
+      '<div class="r-pay"><div>' + t.payout + '</div><div>' + amounts(money, 'rounded') + '</div></div>' +
+      '<p class="r-gen">' + t.generated + ': ' + fmtDateTime(nowIso) + '</p></section>';
+
+    /* --- Nagłówek i stopka każdej strony (pola marginesów @page) --- */
+    const mf = 'font: 8pt system-ui, Arial, sans-serif; color: #000;';
+    const pageCss = '@media print { @page {' +
+      '@top-left { content: ' + cssStr(t.app + (name ? ' · ' + name : '')) + '; ' + mf + ' vertical-align: bottom; padding-bottom: 2mm; }' +
+      '@top-right { content: ' + cssStr(t.period + ': ' + periodTxt) + '; ' + mf + ' vertical-align: bottom; padding-bottom: 2mm; }' +
+      '@bottom-left { content: ' + cssStr(t.generated + ': ' + fmtDateTime(nowIso).slice(0, 10)) + '; ' + mf + ' vertical-align: top; padding-top: 2mm; }' +
+      '@bottom-center { content: ' + cssStr(t.gross) + '; ' + mf + ' vertical-align: top; padding-top: 2mm; }' +
+      '@bottom-right { content: ' + cssStr(t.pageA) + ' counter(page) ' + cssStr(t.pageB) + ' counter(pages); ' + mf + ' vertical-align: top; padding-top: 2mm; }' +
+      '} }';
+
+    return { html: h, pageCss, title: 'Czas-pracy_' + range.from + '_' + range.to, sum, money, logs };
+  }
+
+  /** Wstawia raport do dokumentu (widoczny tylko na wydruku). */
+  function renderReport(state, range, lang, nowIso) {
+    const r = buildReport(state, range, lang, nowIso || new Date().toISOString());
+    document.getElementById('report').innerHTML = r.html;
+    document.getElementById('report').lang = lang;
+    document.getElementById('page-style').textContent = r.pageCss;
+    return r;
+  }
+
+  /* ================= 5. INTERFEJS ================= */
+
+  const $ = s => document.querySelector(s);
+  const PL = 'pl-PL';
+  let state = emptyState();
+  const ui = { tab: 'wpis', editId: null, mode: 'week', day: today(), limit: 10 };
+  let toastTimer = 0;
+
+  function load() {
+    let raw = null;
+    try { raw = localStorage.getItem(KLUCZ); } catch (e) { /* brak dostępu do pamięci */ }
+    if (!raw) return emptyState();
+    try {
+      const v = validateBackup(JSON.parse(raw));
+      if (v.ok) return v.state;
+    } catch (e) { /* uszkodzony JSON */ }
+    // Uszkodzonych danych nie nadpisujemy po cichu — zostaje ich kopia.
+    try { localStorage.setItem(KLUCZ + '_uszkodzone', raw); } catch (e) { /* nic */ }
+    setTimeout(() => toast('Zapisane dane były uszkodzone. Ich kopię zachowano, aplikacja startuje od zera.'), 300);
+    return emptyState();
+  }
+  function save() {
+    try { localStorage.setItem(KLUCZ, JSON.stringify(state)); }
+    catch (e) { toast('Nie udało się zapisać danych w pamięci urządzenia.'); }
+  }
+
+  function toast(msg) {
+    const el = $('#toast');
+    el.textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.textContent = ''; }, 4500);
+  }
+
+  /** Okno potwierdzenia; zwraca Promise<boolean>. */
+  function confirmDlg(title, text, yesLabel) {
+    const dlg = $('#dlg');
+    $('#dlg-title').textContent = title;
+    $('#dlg-text').textContent = text;
+    $('#dlg-yes').textContent = yesLabel;
+    return new Promise(resolve => {
+      dlg.returnValue = 'no';
+      dlg.addEventListener('close', () => resolve(dlg.returnValue === 'yes'), { once: true });
+      dlg.showModal();
+      $('#dlg-no').focus();
+    });
+  }
+
+  function showTab(tab) {
+    ui.tab = tab;
+    document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + tab; });
+    document.querySelectorAll('.nav button').forEach(b => {
+      if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    window.scrollTo(0, 0);
+  }
+
+  /* --- Zakładka Wpis --- */
+
+  function renderPreview() {
+    const d = $('#e-date').value, i = $('#e-in').value, o = $('#e-out').value;
+    const r = isDate(d) ? rateFor(state, d) : null;
+    const box = $('#e-preview');
+    if (!state.settings.rates.length) {
+      box.innerHTML = '<p class="muted" style="margin:0">Najpierw ustaw stawkę godzinową w zakładce Ustawienia.</p>';
+      return;
+    }
+    const c = calc(i, o, r ? r.rateCents : 0);
+    if (!c || !r) {
+      box.innerHTML = '<p class="muted" style="margin:0">Podaj datę oraz godziny wejścia i wyjścia, aby zobaczyć wyliczenie.</p>';
+      return;
+    }
+    const night = parseTime(o) < parseTime(i) ? ' <span class="badge">(zmiana przez północ)</span>' : '';
+    box.innerHTML = '<dl class="kv">' +
+      '<dt>Czas na miejscu' + night + '</dt><dd>' + fmtHM(c.onsite) + '</dd>' +
+      '<dt>Przerwa</dt><dd>' + c.brk + '\u00a0min</dd>' +
+      '<dt>Godziny zwykłe</dt><dd>' + fmtHM(c.regular) + '</dd>' +
+      '<dt>Nadgodziny (125%)</dt><dd>' + fmtHM(c.overtime) + '</dd>' +
+      '<dt>Stawka w tym dniu</dt><dd>' + fmtRate(r.rateCents, r.currency, PL) + '</dd>' +
+      '<dt class="total">Kwota brutto</dt><dd class="total">' + fmtMoney(c.cents, r.currency, PL) + '</dd></dl>';
+  }
+
+  function renderList() {
+    const all = state.entries.slice().sort((a, b) => (a.date < b.date ? 1 : -1));
+    const ul = $('#e-list');
+    if (!all.length) {
+      ul.innerHTML = '<li class="muted">Brak wpisów. Dodaj pierwszy dzień powyżej.</li>';
+    } else {
+      ul.innerHTML = all.slice(0, ui.limit).map(e => {
+        const c = calc(e.in, e.out, e.rateCents);
+        const d = fmtDate(e.date);
+        return '<li><div class="li-top"><div><strong>' + DNI[weekday(e.date)] + ' ' + d + '</strong>' +
+          (e.edited ? ' <span class="badge">(edytowano)</span>' : '') +
+          '<div class="muted small">' + e.in + '–' + e.out + ' · zwykłe ' + fmtHMk(c.regular) + ' · nadgodziny ' + fmtHMk(c.overtime) +
+          ' · przerwa ' + c.brk + ' min</div></div>' +
+          '<div class="li-amt">' + fmtMoney(c.cents, e.currency, PL) + '</div></div>' +
+          '<div class="li-act"><button type="button" class="btn" data-edit="' + esc(e.id) + '" aria-label="Edytuj wpis z dnia ' + d + '">Edytuj</button>' +
+          '<button type="button" class="btn danger" data-del="' + esc(e.id) + '" aria-label="Usuń wpis z dnia ' + d + '">Usuń</button></div></li>';
+      }).join('');
+    }
+    $('#e-more').hidden = all.length <= ui.limit;
+  }
+
+  function resetForm() {
+    ui.editId = null;
+    $('#entry-title').textContent = 'Nowy wpis';
+    $('#e-save').textContent = 'Zapisz wpis';
+    $('#e-cancel').hidden = true;
+    $('#e-date').value = today();
+    $('#e-in').value = '';
+    $('#e-out').value = '';
+    $('#e-error').textContent = '';
+    renderPreview();
+  }
+
+  function startEdit(id) {
+    const e = state.entries.find(x => x.id === id);
+    if (!e) return;
+    ui.editId = id;
+    $('#entry-title').textContent = 'Edycja wpisu z dnia ' + fmtDate(e.date);
+    $('#e-save').textContent = 'Zapisz zmiany';
+    $('#e-cancel').hidden = false;
+    $('#e-date').value = e.date;
+    $('#e-in').value = e.in;
+    $('#e-out').value = e.out;
+    $('#e-error').textContent = '';
+    renderPreview();
+    $('#f-entry').scrollIntoView({ block: 'start' });
+    $('#e-in').focus();
+  }
+
+  function submitEntry(ev) {
+    ev.preventDefault();
+    const d = { date: $('#e-date').value, in: $('#e-in').value, out: $('#e-out').value };
+    const now = new Date().toISOString();
+    const res = ui.editId ? editEntry(state, ui.editId, d, now) : addEntry(state, d, now);
+    if (!res.ok) { $('#e-error').textContent = res.error; return; }
+    save();
+    toast(ui.editId ? (res.changed ? 'Zapisano zmiany we wpisie.' : 'Bez zmian.') : 'Zapisano wpis.');
+    resetForm();
+    render();
+  }
+
+  async function removeEntry(id) {
+    const e = state.entries.find(x => x.id === id);
+    if (!e) return;
+    const ok = await confirmDlg('Usunąć wpis?', 'Wpis z dnia ' + fmtDate(e.date) + ' (' + e.in + '–' + e.out + ') zostanie usunięty. Operacja zapisze się w dzienniku zmian.', 'Usuń');
+    if (!ok) return;
+    deleteEntry(state, id, new Date().toISOString());
+    if (ui.editId === id) resetForm();
+    save();
+    toast('Usunięto wpis.');
+    render();
+  }
+
+  /* --- Zakładka Podsumowanie --- */
+
+  function currentRange() { return periodRange(ui.mode, ui.day); }
+
+  function renderSummary() {
+    const r = currentRange();
+    const es = entriesIn(state, r.from, r.to);
+    const s = summarize(es), money = moneyList(s);
+    const cur = (rateFor(state, r.to) || { currency: 'EUR' }).currency;
+    $('#s-week').setAttribute('aria-pressed', String(ui.mode === 'week'));
+    $('#s-month').setAttribute('aria-pressed', String(ui.mode === 'month'));
+    $('#s-day').value = ui.day;
+    const monthName = new Intl.DateTimeFormat(PL, { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(utc(r.from));
+    $('#s-label').textContent = (ui.mode === 'week' ? 'Tydzień: ' : 'Miesiąc: ' + monthName + ', ') + fmtDate(r.from) + ' – ' + fmtDate(r.to);
+    const pay = money.length ? money.map(m => fmtMoney(m.cents, m.cur, PL)).join('<br>') : fmtMoney(0, cur, PL);
+    $('#s-kv').innerHTML =
+      '<dt>Dni</dt><dd>' + s.days + '</dd>' +
+      '<dt>Godziny zwykłe</dt><dd>' + fmtHM(s.regular) + '</dd>' +
+      '<dt>Nadgodziny</dt><dd>' + fmtHM(s.overtime) + '</dd>' +
+      '<dt>Przerwy</dt><dd>' + fmtHM(s.brk) + '</dd>' +
+      '<dt>Łącznie przepracowane</dt><dd>' + fmtHM(s.worked) + '</dd>' +
+      '<dt class="total">Kwota do wypłaty brutto</dt><dd class="total">' + pay + '</dd>';
+    $('#s-table').innerHTML = !es.length ? '<p class="muted">Brak wpisów w tym okresie.</p>' :
+      '<table><thead><tr><th scope="col">Data</th><th scope="col">Godziny</th><th scope="col" class="n">Na miejscu</th><th scope="col" class="n">Przerwa</th>' +
+      '<th scope="col" class="n">Zwykłe</th><th scope="col" class="n">Nadgodz.</th><th scope="col" class="n">Kwota</th></tr></thead><tbody>' +
+      es.map(e => {
+        const c = calc(e.in, e.out, e.rateCents);
+        return '<tr><td>' + DNI[weekday(e.date)] + ' ' + fmtDate(e.date) + (e.edited ? ' <span class="badge">(edytowano)</span>' : '') + '</td><td>' + e.in + '–' + e.out +
+          '</td><td class="n">' + fmtHMk(c.onsite) + '</td><td class="n">' + c.brk + ' min</td><td class="n">' + fmtHMk(c.regular) +
+          '</td><td class="n">' + fmtHMk(c.overtime) + '</td><td class="n">' + fmtMoney(c.cents, e.currency, PL) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  function shiftPeriod(dir) {
+    if (ui.mode === 'week') ui.day = addDays(ui.day, 7 * dir);
+    else {
+      const d = utc(ui.day.slice(0, 8) + '01');
+      d.setUTCMonth(d.getUTCMonth() + dir);
+      ui.day = iso(d);
+    }
+    render();
+  }
+
+  function exportPdf() {
+    const r = currentRange();
+    if (!entriesIn(state, r.from, r.to).length && !logIn(state, r.from, r.to).length) {
+      toast('Brak wpisów w tym okresie — nie ma czego eksportować.');
+      return;
+    }
+    const rep = renderReport(state, r, state.settings.lang);
+    document.title = rep.title; // podpowiedź nazwy pliku PDF
+    window.print();
+  }
+
+  /* --- Zakładka Ustawienia --- */
+
+  function describeLog(l) {
+    const s = x => fmtDate(x.date) + ', ' + x.in + '–' + x.out + ', ' + fmtRate(x.rateCents, x.currency, PL);
+    if (l.op === 'edit') return '<strong>Edycja wpisu</strong><br>było: ' + s(l.before) + '<br>jest: ' + s(l.after);
+    if (l.op === 'delete') return '<strong>Usunięcie wpisu</strong><br>było: ' + s(l.before);
+    return '<strong>Zmiana stawki</strong> od ' + fmtDate(l.after.from) + '<br>było: ' +
+      (l.before ? fmtRate(l.before.rateCents, l.before.currency, PL) : 'brak') + '<br>jest: ' + fmtRate(l.after.rateCents, l.after.currency, PL) +
+      (l.affected ? '<br>przeliczone wpisy: ' + l.affected : '');
+  }
+
+  function renderSettings() {
+    const cur = rateFor(state, today());
+    $('#r-current').textContent = cur
+      ? 'Stawka obowiązująca dziś: ' + fmtRate(cur.rateCents, cur.currency, PL)
+      : 'Stawka nie jest jeszcze ustawiona.';
+    const rates = state.settings.rates;
+    $('#r-history').innerHTML = rates.length < 1 ? '' :
+      '<h3>Historia stawek</h3><ul class="list">' + rates.slice().reverse().map(r =>
+        '<li class="li-top"><span>od ' + fmtDate(r.from) + '</span><span class="li-amt">' + fmtRate(r.rateCents, r.currency, PL) + '</span></li>').join('') + '</ul>';
+    if (document.activeElement !== $('#o-name')) $('#o-name').value = state.settings.name;
+    $('#o-lang').value = state.settings.lang;
+    const log = state.log.slice().reverse();
+    $('#log-list').innerHTML = !log.length ? '<li class="muted">Dziennik jest pusty.</li>' :
+      log.slice(0, 300).map(l => '<li class="log-item"><span class="muted">' + fmtDateTime(l.ts) + '</span><br>' + describeLog(l) + '</li>').join('');
+  }
+
+  function fillRateForm() {
+    const cur = rateFor(state, today());
+    $('#r-rate').value = cur ? Math.floor(cur.rateCents / 100) + ',' + String(cur.rateCents % 100).padStart(2, '0') : '';
+    $('#r-from').value = today();
+  }
+
+  async function submitRate(ev) {
+    ev.preventDefault();
+    const rateCents = parseRate($('#r-rate').value);
+    const err = $('#r-error');
+    err.textContent = '';
+    if (rateCents === null) { err.textContent = 'Podaj stawkę jako liczbę nie mniejszą niż 0, najwyżej z dwoma miejscami po przecinku (np. 15,00).'; return; }
+    const r = { from: $('#r-from').value, rateCents, currency: 'EUR' };
+    // Próba „na sucho" na kopii danych: walidacja i liczba wpisów do przeliczenia.
+    const trial = setRate(structuredClone(state), r, '');
+    if (!trial.ok) { err.textContent = trial.error; return; }
+    if (trial.affected > 0) {
+      const ok = await confirmDlg('Przeliczyć istniejące wpisy?',
+        'Nowa stawka obowiązuje od ' + fmtDate(r.from) + '. Wpisy z tego dnia i późniejsze (' + trial.affected + ') zostaną przeliczone nową stawką. Wpisy sprzed tej daty pozostaną bez zmian.',
+        'Zapisz i przelicz');
+      if (!ok) return;
+    }
+    setRate(state, r, new Date().toISOString());
+    save();
+    toast('Zapisano stawkę ' + fmtRate(r.rateCents, r.currency, PL) + ' od ' + fmtDate(r.from) + '.');
+    render();
+  }
+
+  function exportBackup() {
+    const data = JSON.stringify({ app: 'czas_pracy', exportedAt: new Date().toISOString(), ...state }, null, 2);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    a.download = 'czas-pracy-kopia-' + today() + '.json';
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Wyeksportowano kopię zapasową.');
+  }
+
+  async function importBackup(file) {
+    if (!file) return;
+    let v;
+    try { v = validateBackup(JSON.parse(await file.text())); }
+    catch (e) { toast('To nie jest poprawny plik JSON. Dane nie zostały zmienione.'); return; }
+    if (!v.ok) {
+      toast('Niepoprawna kopia zapasowa: ' + v.errors[0] + ' Dane nie zostały zmienione.');
+      return;
+    }
+    const ok = await confirmDlg('Zastąpić dane kopią?',
+      'Kopia zawiera wpisów: ' + v.state.entries.length + '. Obecne dane w aplikacji (wpisów: ' + state.entries.length + ') zostaną w całości zastąpione.',
+      'Zastąp dane');
+    if (!ok) return;
+    state = v.state;
+    save();
+    resetForm();
+    fillRateForm();
+    toast('Zaimportowano kopię zapasową.');
+    render();
+  }
+
+  async function wipeAll() {
+    const ok = await confirmDlg('Usunąć wszystkie dane?',
+      'Wszystkie wpisy, stawki, ustawienia i dziennik zmian zostaną trwale usunięte z tego urządzenia. Tej operacji nie można cofnąć.',
+      'Usuń wszystko');
+    if (!ok) return;
+    state = emptyState();
+    try { localStorage.removeItem(KLUCZ); } catch (e) { /* nic */ }
+    resetForm();
+    fillRateForm();
+    toast('Usunięto wszystkie dane.');
+    render();
+  }
+
+  /** Odświeża wszystkie widoki; nieaktualny raport jest czyszczony. */
+  function render() {
+    $('#report').innerHTML = '';
+    renderPreview();
+    renderList();
+    renderSummary();
+    renderSettings();
+  }
+
+  function init() {
+    state = load();
+    $('#rules-box').innerHTML = '<ol class="rules">' + T.pl.rules.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
+      '<h3>Przypadki graniczne</h3><ul class="rules"><li>479 min na miejscu: zwykłe 479, przerwa 0, nadgodziny 0.</li>' +
+      '<li>480 min: zwykłe 450, przerwa 30, nadgodziny 0.</li><li>481 min: zwykłe 435, przerwa 45, nadgodziny 1.</li>' +
+      '<li>540 min (8:00–17:00): zwykłe 435, przerwa 45, nadgodziny 60 — przy 30 €/h daje 255,00 €.</li></ul>' +
+      '<h3>Zaokrąglenia</h3><ul class="rules">' + T.pl.rounding.map(r => '<li>' + r + '</li>').join('') + '</ul>' +
+      '<p>' + T.pl.grossNote + '</p>';
+
+    document.querySelector('.nav').addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-tab]');
+      if (b) showTab(b.dataset.tab);
+    });
+    $('#f-entry').addEventListener('submit', submitEntry);
+    ['#e-date', '#e-in', '#e-out'].forEach(s => $(s).addEventListener('input', () => { $('#e-error').textContent = ''; renderPreview(); }));
+    $('#e-cancel').addEventListener('click', resetForm);
+    $('#e-more').addEventListener('click', () => { ui.limit += 20; renderList(); });
+    $('#e-list').addEventListener('click', ev => {
+      const b = ev.target.closest('button');
+      if (!b) return;
+      if (b.dataset.edit) startEdit(b.dataset.edit);
+      if (b.dataset.del) removeEntry(b.dataset.del);
+    });
+
+    $('#s-week').addEventListener('click', () => { ui.mode = 'week'; render(); });
+    $('#s-month').addEventListener('click', () => { ui.mode = 'month'; render(); });
+    $('#s-prev').addEventListener('click', () => shiftPeriod(-1));
+    $('#s-next').addEventListener('click', () => shiftPeriod(1));
+    $('#s-day').addEventListener('change', ev => { if (isDate(ev.target.value)) { ui.day = ev.target.value; render(); } });
+    $('#s-pdf').addEventListener('click', exportPdf);
+
+    $('#f-rate').addEventListener('submit', submitRate);
+    $('#o-name').addEventListener('input', ev => { state.settings.name = ev.target.value.slice(0, 100); save(); $('#report').innerHTML = ''; });
+    $('#o-lang').addEventListener('change', ev => { state.settings.lang = ev.target.value === 'de' ? 'de' : 'pl'; save(); $('#report').innerHTML = ''; });
+    $('#b-export').addEventListener('click', exportBackup);
+    $('#b-import').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; importBackup(f); });
+    $('#b-wipe').addEventListener('click', wipeAll);
+
+    $('#dlg-yes').addEventListener('click', () => $('#dlg').close('yes'));
+    $('#dlg-no').addEventListener('click', () => $('#dlg').close('no'));
+
+    // Druk z menu przeglądarki (bez przycisku „Eksportuj PDF") też dostaje aktualny raport.
+    window.addEventListener('beforeprint', () => {
+      if (!$('#report').innerHTML) renderReport(state, currentRange(), state.settings.lang);
+    });
+    window.addEventListener('afterprint', () => { document.title = 'Czas pracy'; });
+
+    resetForm();
+    fillRateForm();
+    render();
+    if (!state.settings.rates.length) showTab('ustawienia');
+
+    // Service worker: działanie offline (tylko przy serwowaniu przez http/https).
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* aplikacja działa także bez SW */ });
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+
+  // Publiczne API przestrzeni nazw (używane przez tests.html).
+  return {
+    KLUCZ, calc, calcMinutes, onsiteMinutes, parseTime, parseRate, divRound, amountNum, numToCents, numToMills,
+    fmtFixed, fmtMoney, fmtMills, fmtDecH, fmtHM, fmtHMk, fmtDate,
+    emptyState, rateFor, addEntry, editEntry, deleteEntry, setRate, periodRange, weeksOf, entriesIn, summarize, moneyList, logIn,
+    validateBackup, buildReport, renderReport
+  };
+})();
+</script>
+</body>
+</html>

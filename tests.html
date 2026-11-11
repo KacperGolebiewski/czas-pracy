@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Czas pracy — testy</title>
+<style>
+  body { font: 1rem/1.45 system-ui, Arial, sans-serif; margin: 0; padding: 1rem; background: #fff; color: #111; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
+  h2 { font-size: 1.1rem; margin: 1.5rem 0 .5rem; }
+  #wynik { font-weight: 700; padding: .75rem 1rem; border: 2px solid #111; margin: .75rem 0; }
+  #wynik.ok { border-color: #17663a; color: #17663a; }
+  #wynik.zle { border-color: #b42318; color: #b42318; }
+  .wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { border: 1px solid #bbb; padding: .35rem .5rem; text-align: left; vertical-align: top; }
+  td.ok { color: #17663a; font-weight: 700; }
+  td.zle { color: #b42318; font-weight: 700; }
+  code { overflow-wrap: anywhere; }
+  button { min-height: 2.75rem; padding: .5rem 1rem; font: inherit; margin: .25rem .25rem .25rem 0; cursor: pointer; }
+  iframe { width: 100%; max-width: 24rem; height: 32rem; border: 1px solid #bbb; }
+</style>
+</head>
+<body>
+<h1>Czas pracy — testy</h1>
+<p>Testy uruchamiają logikę z <code>index.html</code> na danych w pamięci. Nie czytają ani nie zmieniają
+Twoich wpisów w <code>localStorage</code>. Strona musi być otwarta przez http(s) (GitHub Pages lub lokalny serwer), nie z pliku.</p>
+<div id="wynik">Uruchamianie…</div>
+<div class="wrap">
+  <table>
+    <thead><tr><th>#</th><th>Test</th><th>Oczekiwany</th><th>Uzyskany</th><th>Wynik</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<h2>Test podglądu druku (ręczny, Chrome, A4)</h2>
+<p>Przycisk ładuje dane przykładowe do raportu i otwiera okno druku. Sprawdź: format A4, nagłówek i stopka na każdej
+stronie, „Strona X z Y”, nagłówki tabel powtórzone po podziale strony, objaśnienie na stronie 1, blok „Podsumowanie” na końcu.
+W oknie druku wyłącz „Nagłówki i stopki” przeglądarki.</p>
+<button type="button" data-print="month,pl">Miesiąc — polski</button>
+<button type="button" data-print="month,de">Miesiąc — niemiecki</button>
+<button type="button" data-print="week,pl">Tydzień — polski</button>
+<button type="button" data-print="week,de">Tydzień — niemiecki</button>
+
+<h2>Aplikacja (ramka testowa)</h2>
+<iframe id="frame" src="index.html" title="Aplikacja Czas pracy"></iframe>
+
+<script>
+(() => {
+  'use strict';
+  const frame = document.getElementById('frame');
+  const tbody = document.getElementById('tbody');
+  let nr = 0, zle = 0;
+
+  /** Jeden test: wypisuje wartość oczekiwaną i uzyskaną. */
+  function test(nazwa, oczekiwany, uzyskany) {
+    const a = JSON.stringify(oczekiwany), b = JSON.stringify(uzyskany);
+    const ok = a === b;
+    if (!ok) zle++;
+    const tr = document.createElement('tr');
+    [String(++nr), nazwa, a, b, ok ? 'OK' : 'BŁĄD'].forEach((t, i) => {
+      const td = document.createElement('td');
+      if (i === 2 || i === 3) { const c = document.createElement('code'); c.textContent = t; td.append(c); }
+      else td.textContent = t;
+      if (i === 4) td.className = ok ? 'ok' : 'zle';
+      tr.append(td);
+    });
+    tbody.append(tr);
+  }
+
+  /** Dane przykładowe: listopad 2026, dwie stawki, edycja i usunięcie. */
+  function demo(CP) {
+    const s = CP.emptyState();
+    s.settings.name = 'Jan Kowalski';
+    CP.setRate(s, { from: '2026-01-01', rateCents: 3000, currency: 'EUR' }, '2026-01-01T08:00:00.000Z');
+    const dni = [
+      ['2026-11-02', '08:00', '16:00'], ['2026-11-03', '08:00', '17:00'], ['2026-11-04', '07:30', '15:29'],
+      ['2026-11-05', '08:00', '16:01'], ['2026-11-06', '22:00', '06:00'], ['2026-11-09', '08:00', '16:26'],
+      ['2026-11-10', '08:00', '17:18'], ['2026-11-12', '06:00', '14:00'], ['2026-11-13', '08:15', '17:40'],
+      ['2026-11-16', '08:00', '16:00'], ['2026-11-17', '08:00', '18:07'], ['2026-11-18', '08:00', '12:30'],
+      ['2026-11-19', '08:00', '16:45'], ['2026-11-20', '08:00', '16:00'], ['2026-11-23', '08:00', '17:00'],
+      ['2026-11-24', '08:00', '16:10'], ['2026-11-25', '09:00', '17:00'], ['2026-11-26', '08:00', '16:00'],
+      ['2026-11-27', '08:00', '19:13'], ['2026-11-30', '08:00', '16:00']
+    ];
+    dni.forEach(d => CP.addEntry(s, { date: d[0], in: d[1], out: d[2] }, '2026-11-30T18:00:00.000Z'));
+    const id = d => s.entries.find(e => e.date === d).id;
+    CP.editEntry(s, id('2026-11-10'), { date: '2026-11-10', in: '08:00', out: '17:19' }, '2026-11-30T18:05:00.000Z');
+    CP.deleteEntry(s, id('2026-11-18'), '2026-11-30T18:06:00.000Z');
+    return s;
+  }
+
+  function run() {
+    const W = frame.contentWindow, CP = W.CzasPracy;
+    const NOW = '2026-11-30T18:10:00.000Z';
+    const min = n => { const c = CP.calcMinutes(n); return { zwykle: c.regular, przerwa: c.brk, nadgodziny: c.overtime }; };
+
+    /* --- Sekcja 3: reguły obliczeń --- */
+    test('479 min', { zwykle: 479, przerwa: 0, nadgodziny: 0 }, min(479));
+    test('480 min', { zwykle: 450, przerwa: 30, nadgodziny: 0 }, min(480));
+    test('481 min', { zwykle: 435, przerwa: 45, nadgodziny: 1 }, min(481));
+    test('506 min', { zwykle: 435, przerwa: 45, nadgodziny: 26 }, min(506));
+    test('558 min', { zwykle: 435, przerwa: 45, nadgodziny: 78 }, min(558));
+    let c = CP.calc('08:00', '17:00', 3000);
+    test('8:00–17:00 (540 min) przy 30 €/h',
+      { naMiejscu: 540, zwykle: 435, przerwa: 45, nadgodziny: 60, grosze: 25500, kwota: '255,00 €' },
+      { naMiejscu: c.onsite, zwykle: c.regular, przerwa: c.brk, nadgodziny: c.overtime, grosze: c.cents, kwota: CP.fmtMoney(c.cents, 'EUR', 'pl-PL') });
+    c = CP.calc('08:00', '16:00', 3000);
+    test('8:00–16:00 przy 30 €/h daje 225,00 €', { grosze: 22500, kwota: '225,00 €' }, { grosze: c.cents, kwota: CP.fmtMoney(c.cents, 'EUR', 'pl-PL') });
+    c = CP.calc('22:00', '06:00', 3000);
+    test('Zmiana przez północ 22:00–06:00', { naMiejscu: 480, zwykle: 450, przerwa: 30, nadgodziny: 0 },
+      { naMiejscu: c.onsite, zwykle: c.regular, przerwa: c.brk, nadgodziny: c.overtime });
+    c = CP.calc('08:00', '17:00', 0);
+    test('Stawka 0: kwota 0, czas liczony normalnie', { grosze: 0, zwykle: 435, nadgodziny: 60 }, { grosze: c.cents, zwykle: c.regular, nadgodziny: c.overtime });
+    c = CP.calc('08:00', '15:59', 3000);
+    test('8:00–15:59 (479 min) z godzin', { naMiejscu: 479, przerwa: 0, grosze: 23950 }, { naMiejscu: c.onsite, przerwa: c.brk, grosze: c.cents });
+    test('Niepoprawne godziny dają null', [null, null, null], [CP.calc('25:00', '10:00', 1), CP.calc('08:00', '', 1), CP.calc('08:00', '08:00', 1)]);
+
+    /* --- Sekcja 4: kwoty --- */
+    c = CP.calc('08:00', '17:00', 3000);
+    test('Kwota dokładna 8:00–17:00 (tysięczne)', 255000, c.mills);
+    test('Zaokrąglenie half-up: 0,5 centa → 1 cent; poniżej → 0 centów', [1, 0], [CP.numToCents(120), CP.numToCents(119)]);
+    c = CP.calc('08:00', '08:07', 3333);
+    test('7 min przy 33,33 €/h: dokładnie 3,889 €, zaokrąglone 3,89 €', { tys: 3889, gr: 389 }, { tys: c.mills, gr: c.cents });
+    test('Parsowanie stawki', [3000, 3050, 3005, 0, null, null, null], ['30', '30,5', '30.05', '0', '-1', '30,555', 'abc'].map(CP.parseRate));
+    test('Godziny dziesiętne (4 miejsca) i h:min', ['7,2500', '0,0167', '7:15'], [CP.fmtDecH(435, 'pl-PL'), CP.fmtDecH(1, 'pl-PL'), CP.fmtHMk(435)]);
+    test('Format kwot wg lokalu', ['1234,50 €', '1.234,50 €'], [CP.fmtMoney(123450, 'EUR', 'pl-PL'), CP.fmtMoney(123450, 'EUR', 'de-DE')]);
+
+    // Suma z dokładnych kwot, nie z zaokrąglonych dziennych: 3 dni po 6,6667 centa
+    let s = CP.emptyState();
+    CP.setRate(s, { from: '2026-01-01', rateCents: 2000, currency: 'EUR' }, NOW);
+    ['2026-03-02', '2026-03-03', '2026-03-04'].forEach(d => CP.addEntry(s, { date: d, in: '08:00', out: '08:01' }, NOW));
+    s.entries.forEach(e => { e.rateCents = 400; }); // 4,00 €/h → 1 min = 6,6667 centa
+    let sum = CP.summarize(s.entries), m = CP.moneyList(sum);
+    const dzienne = s.entries.map(e => CP.calc(e.in, e.out, e.rateCents).cents);
+    test('Suma okresu z sum dokładnych (3 × 6,6667 centa = 20 centów, a nie 3 × 7 = 21 gr)', { dzienne: [7, 7, 7], suma: 20 }, { dzienne, suma: m[0].cents });
+
+    /* --- Dane: wpisy, edycja, usunięcie, dziennik --- */
+    s = CP.emptyState();
+    test('Wpis bez ustawionej stawki jest odrzucany', false, CP.addEntry(s, { date: '2026-11-02', in: '08:00', out: '16:00' }, NOW).ok);
+    CP.setRate(s, { from: '2026-01-01', rateCents: 3000, currency: 'EUR' }, NOW);
+    CP.addEntry(s, { date: '2026-11-02', in: '08:00', out: '16:00' }, NOW);
+    CP.addEntry(s, { date: '2026-11-03', in: '08:00', out: '17:00' }, NOW);
+    const R = CP.periodRange('week', '2026-11-04');
+    test('Zakres tygodnia dla 04.11.2026 (pon.–niedz.)', { from: '2026-11-02', to: '2026-11-08' }, { from: R.from, to: R.to });
+    const total = () => CP.moneyList(CP.summarize(CP.entriesIn(s, R.from, R.to))).map(x => x.cur + ':' + x.cents).join(' ');
+    test('Suma tygodnia: 225,00 + 255,00', 'EUR:48000', total());
+    test('Drugi wpis w tym samym dniu jest odrzucany', false, CP.addEntry(s, { date: '2026-11-02', in: '09:00', out: '10:00' }, NOW).ok);
+    test('Niepoprawna godzina jest odrzucana', false, CP.addEntry(s, { date: '2026-11-04', in: '8:00', out: '24:00' }, NOW).ok);
+
+    const e1 = s.entries.find(e => e.date === '2026-11-02');
+    CP.editEntry(s, e1.id, { date: '2026-11-02', in: '08:00', out: '17:00' }, NOW);
+    test('Edycja wpisu zmienia sumy (225,00 → 255,00)', 'EUR:51000', total());
+    let l = s.log[s.log.length - 1];
+    test('Edycja zapisuje się w dzienniku z wartościami przed i po',
+      { op: 'edit', ts: NOW, przed: '16:00', po: '17:00', edytowano: true },
+      { op: l.op, ts: l.ts, przed: l.before.out, po: l.after.out, edytowano: e1.edited });
+
+    CP.deleteEntry(s, e1.id, NOW);
+    l = s.log[s.log.length - 1];
+    test('Usunięcie zapisuje się w dzienniku', { op: 'delete', dzien: '2026-11-02', wyjscie: '17:00', po: null },
+      { op: l.op, dzien: l.before.date, wyjscie: l.before.out, po: l.after });
+    test('Usunięcie zmienia sumy', 'EUR:25500', total());
+    test('Dziennik nie znika po edycji i usunięciu (stawka + edycja + usunięcie)', ['rate', 'edit', 'delete'], s.log.map(x => x.op));
+
+    /* --- Stawki i waluty --- */
+    s = CP.emptyState();
+    CP.setRate(s, { from: '2026-01-01', rateCents: 3000, currency: 'EUR' }, NOW);
+    CP.addEntry(s, { date: '2026-10-30', in: '08:00', out: '17:00' }, NOW);
+    CP.addEntry(s, { date: '2026-11-03', in: '08:00', out: '17:00' }, NOW);
+    const res = CP.setRate(s, { from: '2026-11-01', rateCents: 1500, currency: 'EUR' }, NOW);
+    const stary = s.entries.find(e => e.date === '2026-10-30'), nowy = s.entries.find(e => e.date === '2026-11-03');
+    test('Zmiana stawki nie zmienia wpisów sprzed daty zmiany', { stawka: 3000, waluta: 'EUR', grosze: 25500 },
+      { stawka: stary.rateCents, waluta: stary.currency, grosze: CP.calc(stary.in, stary.out, stary.rateCents).cents });
+    test('Wpis od daty zmiany liczony nową stawką (15,00 €/h → 127,50 €)', { przeliczone: 1, stawka: 1500, waluta: 'EUR', kwota: '127,50 €' },
+      { przeliczone: res.affected, stawka: nowy.rateCents, waluta: nowy.currency, kwota: CP.fmtMoney(CP.calc(nowy.in, nowy.out, nowy.rateCents).cents, nowy.currency, 'de-DE') });
+    CP.addEntry(s, { date: '2026-11-04', in: '08:00', out: '16:00' }, NOW);
+    test('Nowy wpis zapisuje stawkę i walutę z dnia pracy', { stawka: 1500, waluta: 'EUR' },
+      (e => ({ stawka: e.rateCents, waluta: e.currency }))(s.entries.find(e => e.date === '2026-11-04')));
+    m = CP.moneyList(CP.summarize(s.entries));
+    test('Jedna waluta (EUR): jedna suma z obu stawek', ['EUR:49500'], m.map(x => x.cur + ':' + x.cents));
+    test('Waluta inna niż EUR jest odrzucana', false, CP.setRate(s, { from: '2026-12-01', rateCents: 3000, currency: 'PLN' }, NOW).ok);
+    test('Ujemna stawka jest odrzucana', false, CP.setRate(s, { from: '2026-12-01', rateCents: -1, currency: 'EUR' }, NOW).ok);
+
+    /* --- Okresy --- */
+    const RM = CP.periodRange('month', '2026-11-15');
+    test('Zakres miesiąca', { from: '2026-11-01', to: '2026-11-30' }, { from: RM.from, to: RM.to });
+    test('Luty w roku przestępnym', '2028-02-29', CP.periodRange('month', '2028-02-10').to);
+    test('Podział listopada 2026 na tygodnie (niepełne: pierwszy i ostatni)',
+      ['01–01 niepełny', '02–08', '09–15', '16–22', '23–29', '30–30 niepełny'],
+      CP.weeksOf(RM.from, RM.to).map(w => w.from.slice(8) + '–' + w.to.slice(8) + (w.full ? '' : ' niepełny')));
+
+    /* --- Kopia zapasowa --- */
+    const D = demo(CP);
+    const kopia = JSON.parse(JSON.stringify(D));
+    let v = CP.validateBackup(kopia);
+    test('Poprawna kopia zapasowa przechodzi walidację i zachowuje dane', { ok: true, wpisy: D.entries.length, dziennik: D.log.length },
+      { ok: v.ok, wpisy: v.state.entries.length, dziennik: v.state.log.length });
+    const zla = JSON.parse(JSON.stringify(D)); zla.entries[0].in = '99:99';
+    test('Uszkodzona kopia jest odrzucana', [false, false, false, false],
+      [CP.validateBackup(zla).ok, CP.validateBackup({}).ok, CP.validateBackup([1, 2]).ok, CP.validateBackup({ version: 1, settings: {}, entries: 'x', log: [] }).ok]);
+
+    /* --- Raport --- */
+    const pl = CP.buildReport(D, RM, 'pl', NOW), de = CP.buildReport(D, RM, 'de', NOW);
+    const ile = (h, re) => (h.match(re) || []).length;
+    // Suma liczona niezależnie w centach z tych samych danych
+    let licznik = 0;
+    CP.entriesIn(D, RM.from, RM.to).forEach(e => {
+      const k = CP.calcMinutes(CP.onsiteMinutes(e.in, e.out));
+      licznik += e.rateCents * (4 * k.regular + 5 * k.overtime);
+    });
+    const grosze = Math.floor((2 * licznik + 240) / 480);
+    test('Suma w raporcie = suma policzona w centach z tych samych danych', grosze, pl.money[0].cents);
+    const kwota = CP.fmtMoney(grosze, 'EUR', 'pl-PL');
+    test('Kwota do wypłaty widoczna w raporcie PL (' + kwota + ')', true, pl.html.includes('<div>Kwota do wypłaty brutto</div><div>' + kwota + '</div>'));
+    test('Kwota do wypłaty widoczna w raporcie DE', true, de.html.includes('<div>Auszahlungsbetrag brutto</div><div>' + CP.fmtMoney(grosze, 'EUR', 'de-DE') + '</div>'));
+    test('Raport PL: tytuł, sekcje, oznaczenie edycji', [true, true, true, true, true, true],
+      ['Sposób obliczania wynagrodzenia', 'Zestawienie godzin', 'Podział na tygodnie', 'Dziennik zmian', '(edytowano)', 'Podsumowanie'].map(x => pl.html.includes(x)));
+    test('Raport DE: tytuł, sekcje, oznaczenie edycji', [true, true, true, true, true, true],
+      ['Berechnung der Vergütung', 'Stundenübersicht', 'Aufteilung nach Wochen', 'Änderungsprotokoll', '(bearbeitet)', 'Zusammenfassung'].map(x => de.html.includes(x)));
+    test('Raport DE nie zawiera polskich nagłówków', false, /Podsumowanie|Nadgodziny|Dziennik zmian/.test(de.html));
+    test('Przykład w raporcie: 217,50 + 37,50 = 255,00 €', [true, true, true], ['217,50 €', '37,50 €', '255,00 €'].map(x => pl.html.includes(x)));
+    test('Każda tabela danych ma nagłówek <thead> (powtarzany na stronach)', true, ile(pl.html, /<thead>/g) >= 6);
+    test('Dziennik w raporcie: edycja i usunięcie z okresu', 2, pl.logs.length);
+    test('Tydzień bez zmian: brak sekcji dziennika i brak podziału na tygodnie', [false, false],
+      (r => [r.html.includes('Dziennik zmian'), r.html.includes('Podział na tygodnie')])(CP.buildReport(D, CP.periodRange('week', '2026-11-03'), 'pl', NOW)));
+    test('Stopka strony: „Strona X z Y" przez counter(page) i counter(pages)', [true, true, true, true],
+      [pl.pageCss.includes('"Strona " counter(page) " z " counter(pages)'), de.pageCss.includes('"Seite " counter(page) " von " counter(pages)'),
+       pl.pageCss.includes('"Kwoty brutto"'), pl.pageCss.includes('Jan Kowalski')]);
+
+    /* --- Układ wydruku (CSS w index.html) --- */
+    const css = Array.from(W.document.querySelectorAll('style')).map(x => x.textContent).join('\n');
+    const druk = css.slice(css.indexOf('@media print'));
+    test('CSS druku: A4 z marginesami, powtarzane nagłówki tabel, bez dzielenia wierszy',
+      [true, true, true, true, true],
+      [/@page\s*\{\s*size:\s*A4;\s*margin:\s*18mm 15mm 20mm 15mm;/.test(druk), /thead\s*\{\s*display:\s*table-header-group/.test(druk),
+       /tr\s*\{\s*break-inside:\s*avoid;\s*page-break-inside:\s*avoid/.test(druk), /page-break-after:\s*avoid/.test(druk), /tabular-nums/.test(druk)]);
+    CP.renderReport(D, RM, 'pl', NOW);
+    const rep = W.document.getElementById('report');
+    test('Raport wstawiony do strony jest ukryty na ekranie i ma komplet sekcji', { ukryty: 'none', sekcje: 4 },
+      { ukryty: W.getComputedStyle(rep).display, sekcje: rep.querySelectorAll('section').length });
+    rep.innerHTML = '';
+
+    test('Testy nie zmieniły danych aplikacji w localStorage', poczatkowe, localStorage.getItem(CP.KLUCZ));
+
+    const el = document.getElementById('wynik');
+    el.textContent = zle ? 'BŁĘDY: ' + zle + ' z ' + nr + ' testów nie przes€o.' : 'Wszystkie testy przes€y: ' + nr + ' z ' + nr + '.';
+    el.className = zle ? 'zle' : 'ok';
+    document.title = (zle ? 'BŁĄD ' + zle + '/' + nr : 'OK ' + nr + '/' + nr) + ' — Czas pracy testy';
+
+    document.querySelectorAll('button[data-print]').forEach(b => b.addEventListener('click', () => {
+      const [mode, lang] = b.dataset.print.split(',');
+      CP.renderReport(D, CP.periodRange(mode, '2026-11-10'), lang, new Date().toISOString());
+      W.focus();
+      W.print();
+    }));
+  }
+
+  let poczatkowe = null;
+  try { poczatkowe = localStorage.getItem('czas_pracy_v1'); } catch (e) { /* brak dostępu */ }
+
+  function start() {
+    try {
+      if (!frame.contentWindow.CzasPracy) throw new Error('Nie znaleziono CzasPracy w index.html');
+      run();
+    } catch (e) {
+      const el = document.getElementById('wynik');
+      el.textContent = 'Nie udało się uruchomić testów: ' + e.message + '. Otwórz stronę przez http(s), nie z pliku.';
+      el.className = 'zle';
+      document.title = 'BŁĄD — Czas pracy testy';
+    }
+  }
+  if (frame.contentDocument && frame.contentDocument.readyState === 'complete' && frame.contentWindow.CzasPracy) start();
+  else frame.addEventListener('load', start);
+})();
+</script>
+</body>
+</html>
