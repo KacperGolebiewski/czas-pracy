@@ -84,7 +84,12 @@ p { margin: 0 0 .75rem; }
 }
 .field { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .75rem; min-width: 0; }
 .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 0 .75rem; align-items: end; }
-label, .label { font-weight: 600; font-size: .9rem; }
+label, .label, legend { font-weight: 600; font-size: .9rem; }
+/* Godzina w cyklu 24 h: dwie listy (godzina, minuty) zamiast pola zależnego od ustawień telefonu */
+fieldset.time { border: 0; padding: 0; margin: 0 0 .75rem; min-width: 0; }
+fieldset.time legend { padding: 0; margin-bottom: .3rem; }
+.hm { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .35rem; align-items: center; font-weight: 700; }
+.hm select { padding: .5rem .4rem; font-variant-numeric: tabular-nums; }
 input, select {
   width: 100%;
   min-width: 0;
@@ -275,14 +280,22 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
         <input type="date" id="e-date" required>
       </div>
       <div class="row2">
-        <div class="field">
-          <label for="e-in">Wejście</label>
-          <input type="time" id="e-in" required>
-        </div>
-        <div class="field">
-          <label for="e-out">Wyjście</label>
-          <input type="time" id="e-out" required>
-        </div>
+        <fieldset class="time">
+          <legend>Wejście</legend>
+          <div class="hm">
+            <select id="e-in-h" aria-label="Wejście: godzina (0–23)" required></select>
+            <span aria-hidden="true">:</span>
+            <select id="e-in-m" aria-label="Wejście: minuty" required></select>
+          </div>
+        </fieldset>
+        <fieldset class="time">
+          <legend>Wyjście</legend>
+          <div class="hm">
+            <select id="e-out-h" aria-label="Wyjście: godzina (0–23)" required></select>
+            <span aria-hidden="true">:</span>
+            <select id="e-out-m" aria-label="Wyjście: minuty" required></select>
+          </div>
+        </fieldset>
       </div>
       <div id="e-preview" class="preview" aria-live="polite"></div>
       <p id="e-error" class="error" role="alert"></p>
@@ -1027,8 +1040,30 @@ window.CzasPracy = (() => {
 
   /* --- Zakładka Wpis --- */
 
+  /** Godzina z pary list (godzina, minuty) jako "HH:MM"; pusta, gdy czegoś brakuje. */
+  function getTime(p) {
+    const h = $('#' + p + '-h').value, m = $('#' + p + '-m').value;
+    return h && m ? h + ':' + m : '';
+  }
+  function setTime(p, v) {
+    const parts = v ? v.split(':') : ['', ''];
+    $('#' + p + '-h').value = parts[0];
+    $('#' + p + '-m').value = parts[1];
+  }
+  /** Wypełnia listy: godziny 00–23 i minuty 00–59 (zawsze cykl 24 h). */
+  function fillTimeSelects() {
+    const opts = n => '<option value="">--</option>' +
+      Array.from({ length: n }, (_, i) => String(i).padStart(2, '0')).map(x => '<option>' + x + '</option>').join('');
+    ['e-in', 'e-out'].forEach(p => {
+      $('#' + p + '-h').innerHTML = opts(24);
+      $('#' + p + '-m').innerHTML = opts(60);
+      // Po wybraniu godziny minuty domyślnie „00".
+      $('#' + p + '-h').addEventListener('change', () => { if (!$('#' + p + '-m').value) $('#' + p + '-m').value = '00'; });
+    });
+  }
+
   function renderPreview() {
-    const d = $('#e-date').value, i = $('#e-in').value, o = $('#e-out').value;
+    const d = $('#e-date').value, i = getTime('e-in'), o = getTime('e-out');
     const r = isDate(d) ? rateFor(state, d) : null;
     const box = $('#e-preview');
     if (!state.settings.rates.length) {
@@ -1077,8 +1112,8 @@ window.CzasPracy = (() => {
     $('#e-save').textContent = 'Zapisz wpis';
     $('#e-cancel').hidden = true;
     $('#e-date').value = today();
-    $('#e-in').value = '';
-    $('#e-out').value = '';
+    setTime('e-in', '');
+    setTime('e-out', '');
     $('#e-error').textContent = '';
     renderPreview();
   }
@@ -1091,17 +1126,17 @@ window.CzasPracy = (() => {
     $('#e-save').textContent = 'Zapisz zmiany';
     $('#e-cancel').hidden = false;
     $('#e-date').value = e.date;
-    $('#e-in').value = e.in;
-    $('#e-out').value = e.out;
+    setTime('e-in', e.in);
+    setTime('e-out', e.out);
     $('#e-error').textContent = '';
     renderPreview();
     $('#f-entry').scrollIntoView({ block: 'start' });
-    $('#e-in').focus();
+    $('#e-in-h').focus();
   }
 
   function submitEntry(ev) {
     ev.preventDefault();
-    const d = { date: $('#e-date').value, in: $('#e-in').value, out: $('#e-out').value };
+    const d = { date: $('#e-date').value, in: getTime('e-in'), out: getTime('e-out') };
     const now = new Date().toISOString();
     const res = ui.editId ? editEntry(state, ui.editId, d, now) : addEntry(state, d, now);
     if (!res.ok) { $('#e-error').textContent = res.error; return; }
@@ -1289,6 +1324,7 @@ window.CzasPracy = (() => {
 
   function init() {
     state = load();
+    fillTimeSelects();
     $('#rules-box').innerHTML = '<ol class="rules">' + T.pl.rules.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
       '<h3>Przypadki graniczne</h3><ul class="rules"><li>479 min na miejscu: zwykłe 479, przerwa 0, nadgodziny 0.</li>' +
       '<li>480 min: zwykłe 450, przerwa 30, nadgodziny 0.</li><li>481 min: zwykłe 435, przerwa 45, nadgodziny 1.</li>' +
@@ -1301,7 +1337,7 @@ window.CzasPracy = (() => {
       if (b) showTab(b.dataset.tab);
     });
     $('#f-entry').addEventListener('submit', submitEntry);
-    ['#e-date', '#e-in', '#e-out'].forEach(s => $(s).addEventListener('input', () => { $('#e-error').textContent = ''; renderPreview(); }));
+    ['#e-date', '#e-in-h', '#e-in-m', '#e-out-h', '#e-out-m'].forEach(s => $(s).addEventListener('change', () => { $('#e-error').textContent = ''; renderPreview(); }));
     $('#e-cancel').addEventListener('click', resetForm);
     $('#e-more').addEventListener('click', () => { ui.limit += 20; renderList(); });
     $('#e-list').addEventListener('click', ev => {
