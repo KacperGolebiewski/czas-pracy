@@ -478,12 +478,18 @@ window.CzasPracy = (() => {
     return b > a ? b - a : b + 1440 - a;
   }
 
-  /** Podział czasu na miejscu na przerwę, godziny zwykłe i nadgodziny (wszystko w minutach). */
+  /**
+   * Podział dnia tak, jak liczy firma (Mitarbeiterjournal), wszystko w minutach:
+   *   przepracowane (Ist) = na miejscu − przerwa
+   *   zwykłe (Soll)       = najwyżej 8 h z czasu przepracowanego
+   *   nadgodziny (Saldo)  = czas przepracowany ponad 8 h
+   */
   function calcMinutes(onsite) {
     const brk = onsite < DZIEN ? 0 : (onsite === DZIEN ? 30 : 45);
-    const regular = Math.min(onsite, DZIEN) - brk;   // przerwa tylko z godzin zwykłych
-    const overtime = Math.max(0, onsite - DZIEN);    // nadgodziny w całości, bez przerwy
-    return { onsite, brk, regular, overtime, worked: regular + overtime };
+    const worked = onsite - brk;                     // przerwa odejmowana od całego czasu na miejscu
+    const regular = Math.min(worked, DZIEN);
+    const overtime = Math.max(0, worked - DZIEN);
+    return { onsite, brk, regular, overtime, worked };
   }
 
   /**
@@ -785,17 +791,18 @@ window.CzasPracy = (() => {
       title: 'Sposób obliczania wynagrodzenia',
       rules: [
         '<b>Czas na miejscu</b> = godzina wyjścia − godzina wejścia, liczony w minutach. Jeśli praca kończy się po północy, czas liczy się do godziny wyjścia następnego dnia.',
-        '<b>Przerwa</b> zależy od czasu na miejscu: poniżej 8 godzin (mniej niż 480 min) – bez przerwy; dokładnie 8 godzin (480 min) – 30 min; powyżej 8 godzin (ponad 480 min) – 45 min. Przerwa jest odejmowana wyłącznie od godzin zwykłych.',
-        '<b>Godziny zwykłe</b> = czas na miejscu, ale najwyżej 8 godzin (480 min), pomniejszony o przerwę. Płatne 100% stawki.',
-        '<b>Nadgodziny</b> = cały czas na miejscu ponad 8 godzin (480 min). Liczone w całości, bez odejmowania przerwy, płatne 125% stawki.',
+        '<b>Przerwa</b> zależy od czasu na miejscu: poniżej 8 godzin (mniej niż 480 min) – bez przerwy; dokładnie 8 godzin (480 min) – 30 min; powyżej 8 godzin (ponad 480 min) – 45 min.',
+        '<b>Czas przepracowany</b> = czas na miejscu − przerwa. Przerwa jest odejmowana od całego czasu na miejscu.',
+        '<b>Godziny zwykłe</b> = czas przepracowany, ale najwyżej 8 godzin (480 min). Płatne 100% stawki.',
+        '<b>Nadgodziny</b> = czas przepracowany ponad 8 godzin (480 min). Płatne 125% stawki.',
         '<b>Kwota za dzień</b> = minuty zwykłe × (stawka ÷ 60) + minuty nadgodzin × (stawka × 1,25 ÷ 60).',
         'Czas liczony jest w pełnych minutach, bez zaokrągleń.',
         'Każdy dzień liczony jest stawką obowiązującą w dniu pracy. Późniejsza zmiana stawki nie zmienia wcześniejszych dni.'
       ],
-      exTitle: r => 'Przykład krok po kroku: praca od 8:00 do 17:00, stawka ' + r,
+      exTitle: r => 'Przykład krok po kroku: praca od 8:00 do 17:45, stawka ' + r,
       step: 'Pozycja', how: 'Obliczenie', result: 'Wynik',
       onsite: 'Czas na miejscu', brk: 'Przerwa', brkOver: 'Przerwa (powyżej 8 h)', regular: 'Godziny zwykłe',
-      overtime: 'Nadgodziny', worked: 'Przepracowane', total: 'Razem', regShort: 'Zwykłe',
+      overtime: 'Nadgodziny', worked: 'Przepracowane', total: 'Razem', regShort: 'Zwykłe', atMost: 'najwyżej 480 min (8 h)',
       roundTitle: 'Zaokrąglenia',
       rounding: [
         'Kwoty liczone są dokładnie, w ułamkach centa. Zaokrąglenie do pełnego centa następuje tylko raz, na końcu: od 0,5 centa w górę.',
@@ -821,17 +828,18 @@ window.CzasPracy = (() => {
       title: 'Berechnung der Vergütung',
       rules: [
         '<b>Anwesenheitszeit</b> = Uhrzeit Gehen − Uhrzeit Kommen, in Minuten. Endet die Arbeit nach Mitternacht, wird bis zur Uhrzeit des Gehens am Folgetag gerechnet.',
-        'Die <b>Pause</b> richtet sich nach der Anwesenheitszeit: unter 8 Stunden (weniger als 480 Min.) – keine Pause; genau 8 Stunden (480 Min.) – 30 Min.; über 8 Stunden (mehr als 480 Min.) – 45 Min. Die Pause wird ausschließlich von den regulären Stunden abgezogen.',
-        '<b>Reguläre Stunden</b> = Anwesenheitszeit, höchstens jedoch 8 Stunden (480 Min.), abzüglich der Pause. Vergütung: 100 % des Stundensatzes.',
-        '<b>Überstunden</b> = die gesamte Anwesenheitszeit über 8 Stunden (480 Min.). Sie zählen vollständig, ohne Pausenabzug, und werden mit 125 % des Stundensatzes vergütet.',
+        'Die <b>Pause</b> richtet sich nach der Anwesenheitszeit: unter 8 Stunden (weniger als 480 Min.) – keine Pause; genau 8 Stunden (480 Min.) – 30 Min.; über 8 Stunden (mehr als 480 Min.) – 45 Min.',
+        '<b>Arbeitszeit (Ist)</b> = Anwesenheitszeit − Pause. Die Pause wird von der gesamten Anwesenheitszeit abgezogen.',
+        '<b>Reguläre Stunden (Soll)</b> = Arbeitszeit, höchstens jedoch 8 Stunden (480 Min.). Vergütung: 100 % des Stundensatzes.',
+        '<b>Überstunden</b> = Arbeitszeit über 8 Stunden (480 Min.). Vergütung: 125 % des Stundensatzes.',
         '<b>Tagesbetrag</b> = reguläre Minuten × (Stundensatz ÷ 60) + Überstundenminuten × (Stundensatz × 1,25 ÷ 60).',
         'Die Zeit wird in vollen Minuten gerechnet, ohne Rundung.',
         'Für jeden Tag gilt der Stundensatz, der am Arbeitstag gültig war. Eine spätere Änderung des Stundensatzes ändert frühere Tage nicht.'
       ],
-      exTitle: r => 'Beispiel Schritt für Schritt: Arbeit von 8:00 bis 17:00 Uhr, Stundensatz ' + r,
+      exTitle: r => 'Beispiel Schritt für Schritt: Arbeit von 8:00 bis 17:45 Uhr, Stundensatz ' + r,
       step: 'Position', how: 'Berechnung', result: 'Ergebnis',
       onsite: 'Anwesenheitszeit', brk: 'Pause', brkOver: 'Pause (über 8 h)', regular: 'Reguläre Stunden',
-      overtime: 'Überstunden', worked: 'Gearbeitet', total: 'Gesamt', regShort: 'Regulär',
+      overtime: 'Überstunden', worked: 'Arbeitszeit', total: 'Gesamt', regShort: 'Regulär', atMost: 'höchstens 480 Min. (8 h)',
       roundTitle: 'Rundung',
       rounding: [
         'Die Beträge werden exakt berechnet, in Bruchteilen eines Cents. Auf volle Cent wird nur einmal gerundet, am Ende: ab 0,5 Cent wird aufgerundet.',
@@ -875,7 +883,7 @@ window.CzasPracy = (() => {
     const desc = s => (s ? fmtDate(s.date) + ', ' + s.in + '–' + s.out + ', ' + fmtRate(s.rateCents, s.currency, L) : '—');
 
     /* --- Strona 1: objaśnienie --- */
-    const ex = calc('08:00', '17:00', 3000);
+    const ex = calc('08:00', '17:45', 3000);
     const exReg = numToCents(amountNum(ex.regular, 0, 3000));
     const exOt = numToCents(amountNum(0, ex.overtime, 3000));
     let h = '<section class="r-explain">' +
@@ -884,11 +892,12 @@ window.CzasPracy = (() => {
       '<ol>' + t.rules.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
       '<h2>' + t.exTitle(fmtRate(3000, defCur, L)) + '</h2>' +
       '<table><thead><tr><th>' + t.step + '</th><th>' + t.how + '</th><th class="n">' + t.result + '</th></tr></thead><tbody>' +
-      '<tr><td>' + t.onsite + '</td><td>17:00 − 8:00</td><td class="n">' + ex.onsite + ' min (' + fmtHM(ex.onsite) + ')</td></tr>' +
+      '<tr><td>' + t.onsite + '</td><td>17:45 − 8:00</td><td class="n">' + ex.onsite + ' min (' + fmtHM(ex.onsite) + ')</td></tr>' +
       '<tr><td>' + t.brkOver + '</td><td></td><td class="n">' + ex.brk + ' min</td></tr>' +
-      '<tr><td>' + t.regular + '</td><td>' + ex.onsite + ' − ' + ex.brk + ' − ' + ex.overtime + ' = ' + ex.regular + ' min (' + fmtHM(ex.regular) + ')<br>' +
+      '<tr><td>' + t.worked + '</td><td>' + ex.onsite + ' − ' + ex.brk + '</td><td class="n">' + ex.worked + ' min (' + fmtHM(ex.worked) + ')</td></tr>' +
+      '<tr><td>' + t.regular + '</td><td>' + t.atMost + ': ' + ex.regular + ' min<br>' +
         ex.regular + ' × ' + fmtFixed(3000, 2, L) + ' ÷ 60</td><td class="n">' + fmtMoney(exReg, defCur, L) + '</td></tr>' +
-      '<tr><td>' + t.overtime + '</td><td>' + ex.onsite + ' − 480 = ' + ex.overtime + ' min (' + fmtHM(ex.overtime) + ') × 125%<br>' +
+      '<tr><td>' + t.overtime + '</td><td>' + ex.worked + ' − 480 = ' + ex.overtime + ' min (' + fmtHM(ex.overtime) + ') × 125%<br>' +
         ex.overtime + ' × ' + fmtFixed(3000, 2, L) + ' × 1,25 ÷ 60</td><td class="n">' + fmtMoney(exOt, defCur, L) + '</td></tr>' +
       '<tr class="r-sum"><td>' + t.total + '</td><td></td><td class="n">' + fmtMoney(ex.cents, defCur, L) + '</td></tr>' +
       '</tbody></table>' +
@@ -1089,6 +1098,7 @@ window.CzasPracy = (() => {
     box.innerHTML = '<dl class="kv">' +
       '<dt>Czas na miejscu' + night + '</dt><dd>' + fmtHM(c.onsite) + '</dd>' +
       '<dt>Przerwa</dt><dd>' + c.brk + '\u00a0min</dd>' +
+      '<dt>Przepracowane</dt><dd>' + fmtHM(c.worked) + '</dd>' +
       '<dt>Godziny zwykłe</dt><dd>' + fmtHM(c.regular) + '</dd>' +
       '<dt>Nadgodziny (125%)</dt><dd>' + fmtHM(c.overtime) + '</dd>' +
       '<dt>Stawka w tym dniu</dt><dd>' + fmtRate(r.rateCents, r.currency, PL) + '</dd>' +
@@ -1337,8 +1347,9 @@ window.CzasPracy = (() => {
     fillTimeSelects();
     $('#rules-box').innerHTML = '<ol class="rules">' + T.pl.rules.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
       '<h3>Przypadki graniczne</h3><ul class="rules"><li>479 min na miejscu: zwykłe 479, przerwa 0, nadgodziny 0.</li>' +
-      '<li>480 min: zwykłe 450, przerwa 30, nadgodziny 0.</li><li>481 min: zwykłe 435, przerwa 45, nadgodziny 1.</li>' +
-      '<li>540 min (8:00–17:00): zwykłe 435, przerwa 45, nadgodziny 60 — przy 30 €/h daje 255,00 €.</li></ul>' +
+      '<li>480 min: zwykłe 450, przerwa 30, nadgodziny 0.</li><li>481 min: przerwa 45, zwykłe 436, nadgodziny 0.</li>' +
+      '<li>525 min (8:00–16:45): przerwa 45, zwykłe 480, nadgodziny 0.</li>' +
+      '<li>585 min (8:00–17:45): przerwa 45, przepracowane 540, zwykłe 480, nadgodziny 60 — przy 30 €/h daje 277,50 €.</li></ul>' +
       '<h3>Zaokrąglenia</h3><ul class="rules">' + T.pl.rounding.map(r => '<li>' + r + '</li>').join('') + '</ul>' +
       '<p>' + T.pl.grossNote + '</p>';
 

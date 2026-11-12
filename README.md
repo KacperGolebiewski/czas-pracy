@@ -61,15 +61,20 @@ Nagłówek, stopka i numeracja „Strona X z Y” wymagają Chrome 131 lub nowsz
 
 - Czas na miejscu = wyjście − wejście, w minutach. Wyjście mniejsze niż wejście oznacza zmianę przez północ.
 - Przerwa: poniżej 480 min – 0 min; dokładnie 480 min – 30 min; powyżej 480 min – 45 min.
-  Przerwa jest odejmowana wyłącznie od godzin zwykłych.
-- Zwykłe = min(na miejscu, 480) − przerwa.
-- Nadgodziny = max(0, na miejscu − 480), w całości, płatne 125% stawki.
+- Przepracowane = na miejscu − przerwa (przerwa odejmowana od całego czasu na miejscu).
+- Zwykłe = min(przepracowane, 480).
+- Nadgodziny = max(0, przepracowane − 480), płatne 125% stawki.
 - Kwota dzienna = zwykłe × (stawka / 60) + nadgodziny × (stawka × 1,25 / 60).
 - Kwoty liczone są na liczbach całkowitych (jednostka 1/240 centa). Zaokrąglenie do centa
   następuje raz, na końcu, metodą half-up. Sumy tygodnia i miesiąca powstają z sum dokładnych,
   a nie z zaokrąglonych kwot dziennych.
 
-Przykład: 8:00–17:00 przy 30 €/h → zwykłe 435 min (217,50 €) + nadgodziny 60 min (37,50 €) = 255,00 €.
+Przykład: 8:00–17:45 przy 30 €/h → na miejscu 585 min, przerwa 45 min, przepracowane 540 min →
+zwykłe 480 min (240,00 €) + nadgodziny 60 min (37,50 €) = 277,50 €.
+
+Podział godzin jest zgodny z wydrukiem firmy (Mitarbeiterjournal): Ist Std = przepracowane,
+Soll Std = 8,00 h, Tages Saldo = nadgodziny. Test w `tests.html` sprawdza to na 22 dniach
+z października 2026. Progi przerwy dla dni krótszych niż 9 h na miejscu nie są potwierdzone wydrukiem.
 
 ## Testy
 

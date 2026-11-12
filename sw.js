@@ -2,7 +2,7 @@
    Strategia: odpowiedź z pamięci podręcznej od razu, a w tle pobranie świeżej wersji
    (stale-while-revalidate). Po wdrożeniu nowej wersji zmiany widać przy drugim otwarciu.
    Obsługiwane są wyłącznie żądania GET do własnego hostingu. */
-const CACHE = 'czas-pracy-v3';
+const CACHE = 'czas-pracy-v4';
 const PLIKI = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', event => {

@@ -97,12 +97,14 @@ W oknie druku wyłącz „Nagłówki i stopki” przeglądarki.</p>
     /* --- Sekcja 3: reguły obliczeń --- */
     test('479 min', { zwykle: 479, przerwa: 0, nadgodziny: 0 }, min(479));
     test('480 min', { zwykle: 450, przerwa: 30, nadgodziny: 0 }, min(480));
-    test('481 min', { zwykle: 435, przerwa: 45, nadgodziny: 1 }, min(481));
-    test('506 min', { zwykle: 435, przerwa: 45, nadgodziny: 26 }, min(506));
-    test('558 min', { zwykle: 435, przerwa: 45, nadgodziny: 78 }, min(558));
+    test('481 min', { zwykle: 436, przerwa: 45, nadgodziny: 0 }, min(481));
+    test('506 min', { zwykle: 461, przerwa: 45, nadgodziny: 0 }, min(506));
+    test('525 min (równo 8 h pracy po przerwie)', { zwykle: 480, przerwa: 45, nadgodziny: 0 }, min(525));
+    test('526 min (pierwsza minuta nadgodzin)', { zwykle: 480, przerwa: 45, nadgodziny: 1 }, min(526));
+    test('558 min', { zwykle: 480, przerwa: 45, nadgodziny: 33 }, min(558));
     let c = CP.calc('08:00', '17:00', 3000);
     test('8:00–17:00 (540 min) przy 30 €/h',
-      { naMiejscu: 540, zwykle: 435, przerwa: 45, nadgodziny: 60, grosze: 25500, kwota: '255,00 €' },
+      { naMiejscu: 540, zwykle: 480, przerwa: 45, nadgodziny: 15, grosze: 24938, kwota: '249,38 €' },
       { naMiejscu: c.onsite, zwykle: c.regular, przerwa: c.brk, nadgodziny: c.overtime, grosze: c.cents, kwota: CP.fmtMoney(c.cents, 'EUR', 'pl-PL') });
     c = CP.calc('08:00', '16:00', 3000);
     test('8:00–16:00 przy 30 €/h daje 225,00 €', { grosze: 22500, kwota: '225,00 €' }, { grosze: c.cents, kwota: CP.fmtMoney(c.cents, 'EUR', 'pl-PL') });
@@ -110,14 +112,33 @@ W oknie druku wyłącz „Nagłówki i stopki” przeglądarki.</p>
     test('Zmiana przez północ 22:00–06:00', { naMiejscu: 480, zwykle: 450, przerwa: 30, nadgodziny: 0 },
       { naMiejscu: c.onsite, zwykle: c.regular, przerwa: c.brk, nadgodziny: c.overtime });
     c = CP.calc('08:00', '17:00', 0);
-    test('Stawka 0: kwota 0, czas liczony normalnie', { grosze: 0, zwykle: 435, nadgodziny: 60 }, { grosze: c.cents, zwykle: c.regular, nadgodziny: c.overtime });
+    test('Stawka 0: kwota 0, czas liczony normalnie', { grosze: 0, zwykle: 480, nadgodziny: 15 }, { grosze: c.cents, zwykle: c.regular, nadgodziny: c.overtime });
     c = CP.calc('08:00', '15:59', 3000);
     test('8:00–15:59 (479 min) z godzin', { naMiejscu: 479, przerwa: 0, grosze: 23950 }, { naMiejscu: c.onsite, przerwa: c.brk, grosze: c.cents });
     test('Niepoprawne godziny dają null', [null, null, null], [CP.calc('25:00', '10:00', 1), CP.calc('08:00', '', 1), CP.calc('08:00', '08:00', 1)]);
 
+    /* --- Zgodność z wydrukiem firmy (Mitarbeiterjournal, październik 2026) --- */
+    const h2 = n => (Math.floor((n * 100 * 2 + 60) / 120) / 100).toFixed(2); // minuty → godziny, 2 miejsca
+    const firma = [ // wejście, wyjście, Ist Std, Tages Saldo
+      ['05:45', '17:54', '11.40', '3.40'], ['05:42', '16:42', '10.25', '2.25'], ['05:44', '16:25', '9.93', '1.93'], ['05:46', '17:02', '10.52', '2.52'],
+      ['05:46', '16:28', '9.95', '1.95'], ['05:45', '16:54', '10.40', '2.40'], ['05:44', '16:19', '9.83', '1.83'], ['05:44', '17:25', '10.93', '2.93'],
+      ['05:45', '15:25', '8.92', '0.92'], ['05:43', '15:58', '9.50', '1.50'], ['05:48', '17:02', '10.48', '2.48'], ['05:47', '16:40', '10.13', '2.13'],
+      ['06:45', '17:15', '9.75', '1.75'], ['05:49', '15:26', '8.87', '0.87'], ['05:46', '16:46', '10.25', '2.25'], ['05:45', '17:31', '11.02', '3.02'],
+      ['05:46', '16:30', '9.98', '1.98'], ['06:13', '16:32', '9.57', '1.57'], ['05:47', '17:17', '10.75', '2.75'], ['05:46', '16:48', '10.28', '2.28'],
+      ['05:46', '17:09', '10.63', '2.63'], ['05:47', '16:35', '10.05', '2.05']
+    ];
+    const fc = firma.map(d => CP.calc(d[0], d[1], 0));
+    test('Wydruk firmy: Ist Std i Tages Saldo dla wszystkich 22 dni', firma.map(d => d[2] + '/' + d[3]), fc.map(x => h2(x.worked) + '/' + h2(x.overtime)));
+    const fs = k => fc.reduce((a, x) => a + x[k], 0);
+    test('Wydruk firmy: sumy miesiąca Ist 223,40 h, Soll 176,00 h, Saldo 47,40 h, przerwy 16,50 h', ['223.40', '176.00', '47.40', '16.50'],
+      [h2(fs('worked')), h2(fs('regular')), h2(fs('overtime')), h2(fs('brk'))]);
+
     /* --- Sekcja 4: kwoty --- */
     c = CP.calc('08:00', '17:00', 3000);
-    test('Kwota dokładna 8:00–17:00 (tysięczne)', 255000, c.mills);
+    test('Kwota dokładna 8:00–17:00: 249,375 € → zaokrąglone 249,38 €', { tys: 249375, centy: 24938 }, { tys: c.mills, centy: c.cents });
+    c = CP.calc('08:00', '17:45', 3000);
+    test('8:00–17:45 przy 30 €/h: 8 h zwykłych + 1 h nadgodzin = 277,50 €', { przepracowane: 540, zwykle: 480, nadgodziny: 60, centy: 27750 },
+      { przepracowane: c.worked, zwykle: c.regular, nadgodziny: c.overtime, centy: c.cents });
     test('Zaokrąglenie half-up: 0,5 centa → 1 cent; poniżej → 0 centów', [1, 0], [CP.numToCents(120), CP.numToCents(119)]);
     c = CP.calc('08:00', '08:07', 3333);
     test('7 min przy 33,33 €/h: dokładnie 3,889 €, zaokrąglone 3,89 €', { tys: 3889, gr: 389 }, { tys: c.mills, gr: c.cents });
@@ -143,13 +164,13 @@ W oknie druku wyłącz „Nagłówki i stopki” przeglądarki.</p>
     const R = CP.periodRange('week', '2026-11-04');
     test('Zakres tygodnia dla 04.11.2026 (pon.–niedz.)', { from: '2026-11-02', to: '2026-11-08' }, { from: R.from, to: R.to });
     const total = () => CP.moneyList(CP.summarize(CP.entriesIn(s, R.from, R.to))).map(x => x.cur + ':' + x.cents).join(' ');
-    test('Suma tygodnia: 225,00 + 255,00', 'EUR:48000', total());
+    test('Suma tygodnia: 225,00 + 249,375', 'EUR:47438', total());
     test('Drugi wpis w tym samym dniu jest odrzucany', false, CP.addEntry(s, { date: '2026-11-02', in: '09:00', out: '10:00' }, NOW).ok);
     test('Niepoprawna godzina jest odrzucana', false, CP.addEntry(s, { date: '2026-11-04', in: '8:00', out: '24:00' }, NOW).ok);
 
     const e1 = s.entries.find(e => e.date === '2026-11-02');
     CP.editEntry(s, e1.id, { date: '2026-11-02', in: '08:00', out: '17:00' }, NOW);
-    test('Edycja wpisu zmienia sumy (225,00 → 255,00)', 'EUR:51000', total());
+    test('Edycja wpisu zmienia sumy (225,00 → 249,375; razem 498,75)', 'EUR:49875', total());
     let l = s.log[s.log.length - 1];
     test('Edycja zapisuje się w dzienniku z wartościami przed i po',
       { op: 'edit', ts: NOW, przed: '16:00', po: '17:00', edytowano: true },
@@ -159,7 +180,7 @@ W oknie druku wyłącz „Nagłówki i stopki” przeglądarki.</p>
     l = s.log[s.log.length - 1];
     test('Usunięcie zapisuje się w dzienniku', { op: 'delete', dzien: '2026-11-02', wyjscie: '17:00', po: null },
       { op: l.op, dzien: l.before.date, wyjscie: l.before.out, po: l.after });
-    test('Usunięcie zmienia sumy', 'EUR:25500', total());
+    test('Usunięcie zmienia sumy', 'EUR:24938', total());
     test('Dziennik nie znika po edycji i usunięciu (stawka + edycja + usunięcie)', ['rate', 'edit', 'delete'], s.log.map(x => x.op));
 
     /* --- Stawki i waluty --- */
@@ -169,15 +190,15 @@ W oknie druku wyłącz „Nagłówki i stopki” przeglądarki.</p>
     CP.addEntry(s, { date: '2026-11-03', in: '08:00', out: '17:00' }, NOW);
     const res = CP.setRate(s, { from: '2026-11-01', rateCents: 1500, currency: 'EUR' }, NOW);
     const stary = s.entries.find(e => e.date === '2026-10-30'), nowy = s.entries.find(e => e.date === '2026-11-03');
-    test('Zmiana stawki nie zmienia wpisów sprzed daty zmiany', { stawka: 3000, waluta: 'EUR', grosze: 25500 },
+    test('Zmiana stawki nie zmienia wpisów sprzed daty zmiany', { stawka: 3000, waluta: 'EUR', grosze: 24938 },
       { stawka: stary.rateCents, waluta: stary.currency, grosze: CP.calc(stary.in, stary.out, stary.rateCents).cents });
-    test('Wpis od daty zmiany liczony nową stawką (15,00 €/h → 127,50 €)', { przeliczone: 1, stawka: 1500, waluta: 'EUR', kwota: '127,50 €' },
+    test('Wpis od daty zmiany liczony nową stawką (15,00 €/h → 124,69 €)', { przeliczone: 1, stawka: 1500, waluta: 'EUR', kwota: '124,69 €' },
       { przeliczone: res.affected, stawka: nowy.rateCents, waluta: nowy.currency, kwota: CP.fmtMoney(CP.calc(nowy.in, nowy.out, nowy.rateCents).cents, nowy.currency, 'de-DE') });
     CP.addEntry(s, { date: '2026-11-04', in: '08:00', out: '16:00' }, NOW);
     test('Nowy wpis zapisuje stawkę i walutę z dnia pracy', { stawka: 1500, waluta: 'EUR' },
       (e => ({ stawka: e.rateCents, waluta: e.currency }))(s.entries.find(e => e.date === '2026-11-04')));
     m = CP.moneyList(CP.summarize(s.entries));
-    test('Jedna waluta (EUR): jedna suma z obu stawek', ['EUR:49500'], m.map(x => x.cur + ':' + x.cents));
+    test('Jedna waluta (EUR): jedna suma z obu stawek', ['EUR:48656'], m.map(x => x.cur + ':' + x.cents));
     test('Waluta inna niż EUR jest odrzucana', false, CP.setRate(s, { from: '2026-12-01', rateCents: 3000, currency: 'PLN' }, NOW).ok);
     test('Ujemna stawka jest odrzucana', false, CP.setRate(s, { from: '2026-12-01', rateCents: -1, currency: 'EUR' }, NOW).ok);
 
@@ -218,7 +239,7 @@ W oknie druku wyłącz „Nagłówki i stopki” przeglądarki.</p>
     test('Raport DE: tytuł, sekcje, oznaczenie edycji', [true, true, true, true, true, true],
       ['Berechnung der Vergütung', 'Stundenübersicht', 'Aufteilung nach Wochen', 'Änderungsprotokoll', '(bearbeitet)', 'Zusammenfassung'].map(x => de.html.includes(x)));
     test('Raport DE nie zawiera polskich nagłówków', false, /Podsumowanie|Nadgodziny|Dziennik zmian/.test(de.html));
-    test('Przykład w raporcie: 217,50 + 37,50 = 255,00 €', [true, true, true], ['217,50 €', '37,50 €', '255,00 €'].map(x => pl.html.includes(x)));
+    test('Przykład w raporcie: 240,00 + 37,50 = 277,50 €', [true, true, true], ['240,00 €', '37,50 €', '277,50 €'].map(x => pl.html.includes(x)));
     test('Każda tabela danych ma nagłówek <thead> (powtarzany na stronach)', true, ile(pl.html, /<thead>/g) >= 6);
     test('Dziennik w raporcie: edycja i usunięcie z okresu', 2, pl.logs.length);
     test('Tydzień bez zmian: brak sekcji dziennika i brak podziału na tygodnie', [false, false],
